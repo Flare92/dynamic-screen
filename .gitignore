@@ -1,0 +1,19 @@
+# SwiftPM
+.build/
+.swiftpm/
+Package.resolved.bak
+*.xcodeproj
+xcuserdata/
+
+# Output di build/packaging
+build/
+dist/
+*.dmg
+*.icns
+*.iconset/
+
+# Configurazione locale (es. nome certificato di firma)
+scripts/local.env
+
+# macOS
+.DS_Store

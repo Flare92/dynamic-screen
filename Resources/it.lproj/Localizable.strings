@@ -1,0 +1,36 @@
+/* NovaSplit — Italiano. Le chiavi devono coincidere con en.lproj (verificato da LocalizationTests). */
+
+/* Barra dei menu */
+"menu.settings" = "Impostazioni…";
+"menu.about" = "Informazioni su NovaSplit";
+"menu.quit" = "Esci da NovaSplit";
+"menu.grantAccessibility" = "Concedi permesso Accessibilità…";
+"menu.accessibilityGranted" = "Accessibilità: attiva";
+"menu.statusTooltip" = "NovaSplit";
+
+/* Onboarding Accessibilità */
+"onboarding.ax.windowTitle" = "Permesso Accessibilità";
+"onboarding.ax.title" = "NovaSplit ha bisogno dell'accesso Accessibilità";
+"onboarding.ax.body" = "Per spostare e ridimensionare le finestre delle altre app, macOS richiede di autorizzare NovaSplit in Impostazioni di Sistema → Privacy e sicurezza → Accessibilità.";
+"onboarding.ax.step1" = "Fai clic su “Apri Impostazioni di Sistema”.";
+"onboarding.ax.step2" = "Attiva l'interruttore accanto a NovaSplit (sblocca con la password se richiesto).";
+"onboarding.ax.step3" = "Torna qui: questa finestra si aggiorna da sola.";
+"onboarding.ax.openSettings" = "Apri Impostazioni di Sistema";
+"onboarding.ax.waiting" = "In attesa del permesso…";
+"onboarding.ax.granted" = "Permesso concesso. È tutto pronto!";
+"onboarding.ax.done" = "Fine";
+"onboarding.ax.later" = "Più tardi";
+"onboarding.ax.relaunch" = "Riavvia NovaSplit";
+"onboarding.ax.relaunchHint" = "Già attivo ma resta in attesa? Rimuovi NovaSplit dalla lista con “–”, aggiungilo di nuovo e riavvia.";
+
+/* Impostazioni */
+"settings.windowTitle" = "Impostazioni NovaSplit";
+"settings.tab.general" = "Generale";
+"settings.tab.about" = "Info";
+"settings.accessibility" = "Accessibilità";
+"settings.enabled" = "Attivo";
+"settings.disabled" = "Non attivo";
+"settings.configure" = "Configura…";
+"settings.comingSoon" = "Layout, regole, Claude e scorciatoie arriveranno qui nelle prossime fasi.";
+"settings.version" = "Versione %@ (%@)";
+"settings.tagline" = "Split screen futuristico per macOS.";
