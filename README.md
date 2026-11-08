@@ -8,12 +8,21 @@ PWA (installabile sul telefono, funziona offline) che crea un piano di allenamen
 - **obiettivo**: perdere peso, massa muscolare, tonificare, resistenza, mobilità, salute (con peso e data obiettivo facoltativi)
 - **tempo**: minuti al giorno (10–120) e giorni a settimana (2–7), attrezzi disponibili
 
+## Novità della versione 2
+
+- **Design "neon lab"**: tema scuro con accenti neon, sfondo animato, transizioni tra le schermate (View Transitions), anelli di progresso, numeri che contano, esplosione di particelle quando completi un allenamento.
+- **Esercizi in 3D**: ogni esercizio (93) è animato su un manichino olografico (Three.js) con i **muscoli coinvolti che si illuminano**, attrezzi (manubri, bilanciere, elastici, panca, sbarra, muro, bici…), rotazione con il dito, vista fronte/lato, rallentatore.
+- **Guide ultra dettagliate**: per ogni esercizio perché farlo, posizione di partenza, esecuzione passo passo, respirazione, ritmo, errori comuni, versione più facile e più difficile, avvertenze di sicurezza, link alla ricerca di video tutorial.
+- **Allenamento guidato a schermo intero**: il manichino mostra l’esercizio, timer per esercizi a tempo, contatore delle serie, recuperi automatici con anteprima del prossimo esercizio, suggerimenti tecnici che scorrono, bip negli ultimi secondi, **guida vocale in italiano**, schermo sempre acceso.
+- **Libreria 3D**: tutti gli esercizi, con ricerca per nome o muscolo e filtro "adatti a te".
+
 ## Cosa fa
 
 | Sezione | Contenuto |
 |---|---|
 | **Oggi** | Allenamento del giorno con checklist, spiegazione di ogni esercizio, timer di recupero, feedback (facile/giusto/duro), abitudini quotidiane, pesata settimanale. Nei giorni di riposo: recupero attivo e possibilità di recuperare un allenamento saltato. |
 | **Piano** | Settimana completa, data stimata per raggiungere l’obiettivo con le tappe, calorie e macronutrienti, abitudini prioritarie, avvisi di sicurezza, spiegazione di cosa è stato escluso e perché. |
+| **Esercizi** | Libreria 3D con ricerca e filtri; quelli non adatti alla tua salute sono segnalati. |
 | **Progressi** | Grafico del peso rispetto alla previsione, costanza, serie di allenamenti consecutivi e **suggerimenti di adattamento** applicabili con un tocco (calorie, giorni, livello). |
 | **Profilo** | Modifica dati e obiettivi, backup/ripristino in JSON, installazione. |
 
@@ -59,5 +68,22 @@ css/style.css         stile (tema chiaro/scuro automatico)
 js/app.js             interfaccia, navigazione, salvataggio
 js/engine.js          motore: piano, alimentazione, tempi, abitudini, adattamento
 js/exercises.js       database esercizi con controindicazioni
-tests/                test del motore (node --test)
+js/guide.js           guida tecnica dettagliata di ogni esercizio
+js/motions.js         pose chiave delle animazioni 3D
+js/viewer3d.js        manichino 3D, animazione, attrezzi, muscoli evidenziati
+js/player.js          allenamento guidato a schermo intero
+js/sheet.js           scheda esercizio (3D + guida)
+js/fx.js              icone, effetti, suoni, voce
+vendor/               three.js (MIT)
+fonts/                Space Grotesk e JetBrains Mono (SIL OFL 1.1)
+dev/pose-lab.html     pagina di sviluppo per controllare le animazioni una per una
+tests/                test (node --test)
 ```
+
+### Aggiungere o correggere un’animazione
+
+Le animazioni sono pose chiave in `js/motions.js` (angoli in gradi di colonna, spalle, gomiti, anche, ginocchia, caviglie). Il visualizzatore interpola le pose, appoggia il corpo a terra e tiene fermi piedi o mani. Per provarne una apri `dev/pose-lab.html` con il server locale e nella console scrivi `show('s_squat', 0.5)`.
+
+### Video reali
+
+L’app non incorpora video di terzi (diritti d’autore). Dalla scheda di ogni esercizio puoi aprire una ricerca di video tutorial; se in futuro registri tuoi video, basta aggiungere un campo `video` all’esercizio in `js/guide.js` e mostrarlo nella scheda.
