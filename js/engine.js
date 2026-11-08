@@ -3,6 +3,7 @@
 // È una funzione pura: stesso profilo => stesso piano.
 
 import { EXERCISES, BY_ID } from './exercises.js';
+import { computeProfile, PAIN_REGIONS, LEVEL_LABEL, AREAS } from './assessment.js';
 
 // ------------------------------------------------------------------
 // Opzioni usate dall'interfaccia
@@ -79,41 +80,104 @@ export const weekdayIndex = (d) => (d.getDay() + 6) % 7; // lun = 0
 // Dati derivati dal profilo
 // ------------------------------------------------------------------
 
-export function derive(p) {
+// esercizi che caricano i polsi (appoggio sulle mani)
+const HAND_LOADED = ['p_muro', 'p_rialzo', 'p_ginocchia', 'p_classici', 'p_dip', 'v_pike', 'c_birddog', 'g_kick', 'w_gatto', 'm_gatto', 'r_tavolo'];
+const NECK_LOADED = ['c_crunch', 'c_hollow', 'v_pike', 'h_superman'];
+const UPPER_BACK_LOADED = ['r_bil', 'h_stacco', 's_backsquat'];
+
+// livello del test (1–5) → livello degli esercizi (1–3)
+const toExLevel = (L, fallback) => (L === null || L === undefined ? fallback : L <= 2 ? 1 : L === 3 ? 2 : 3);
+
+/**
+ * ctx (facoltativo): { cp: profilo dalla valutazione, swaps, excluded, exAdj }
+ */
+export function derive(p, ctx = {}) {
   const h = p.altezza / 100;
   const bmi = p.peso / (h * h);
   const cond = new Set(p.condizioni || []);
+  const sensitive = new Set();
+  const pains = [];
+  for (const r of PAIN_REGIONS) {
+    const v = Number(p.dolori?.[r.id] || 0);
+    if (v >= 2) cond.add(r.cond);
+    else if (v === 1) sensitive.add(r.cond);
+    if (v > 0) pains.push({ ...r, v });
+  }
   const equip = new Set(['corpo', ...(p.attrezzi || [])]);
   if (equip.has('palestra')) ['manubri', 'elastici', 'sbarra', 'tapis', 'bici'].forEach((e) => equip.add(e));
+  const cp = ctx.cp || null;
+  const flags = cp?.flags || {};
 
-  let level = { principiante: 1, intermedio: 2, avanzato: 3 }[p.esperienza] || 1;
-  if (cond.has('intervento') || cond.has('cuore') || cond.has('petto') || p.eta >= 70) level = 1;
-  if (p.eta >= 60 || bmi >= 35 || cond.has('gravidanza')) level = Math.min(level, 2);
+  // livello massimo consentito dalla sicurezza
+  let safety = 3;
+  if (cond.has('intervento') || cond.has('cuore') || cond.has('petto') || p.eta >= 70) safety = 1;
+  if (p.eta >= 60 || bmi >= 35 || cond.has('gravidanza')) safety = Math.min(safety, 2);
+  const expLvl = { principiante: 1, intermedio: 2, avanzato: 3 }[p.esperienza] || 1;
+
+  // livello per schema motorio, dai test se disponibili
+  const lv = cp?.levels || {};
+  const push = toExLevel(lv.push, expLvl), pull = toExLevel(lv.pull ?? lv.push, expLvl);
+  const legs = toExLevel(lv.legs, expLvl), core = toExLevel(lv.core, expLvl);
+  // chi completa almeno 5 piegamenti sulle punte può farli nel piano
+  const pu = cp?.maxes?.pushup;
+  const pushH = pu && pu.variant === 'classici' && pu.reps >= 5 ? Math.max(push, 2) : push;
+  const pl = { push_h: pushH, push_v: push, pull_h: pull, pull_v: pull, squat: legs, lunge: legs, glutei: legs, calf: legs, hinge: legs, core };
+  // fastidio lieve: un livello in meno sugli schemi che caricano quella zona
+  if (sensitive.has('spalle')) ['push_h', 'push_v', 'pull_h', 'pull_v'].forEach((k) => pl[k]--);
+  if (sensitive.has('ginocchia')) ['squat', 'lunge'].forEach((k) => pl[k]--);
+  if (sensitive.has('anche')) ['lunge', 'hinge'].forEach((k) => pl[k]--);
+  if (sensitive.has('schiena')) ['hinge', 'core'].forEach((k) => pl[k]--);
+  if (sensitive.has('polsi')) ['push_h'].forEach((k) => pl[k]--);
+  for (const k in pl) pl[k] = clamp(Math.min(pl[k], safety), 1, 3);
+  const testLv = [lv.push, lv.legs, lv.core, lv.cardio].filter((x) => x !== null && x !== undefined);
+  const level = Math.min(safety, testLv.length ? toExLevel(Math.round(testLv.reduce((a, b) => a + b, 0) / testLv.length), expLvl) : expLvl);
 
   const blocked = new Set();
-  if (['ginocchia', 'anche', 'gravidanza', 'osteoporosi', 'cuore', 'petto', 'intervento'].some((c) => cond.has(c)) || bmi >= 30 || p.eta >= 65) blocked.add('impatto');
+  if (['ginocchia', 'anche', 'gravidanza', 'osteoporosi', 'cuore', 'petto', 'intervento', 'caviglie'].some((c) => cond.has(c)) || bmi >= 30 || p.eta >= 65) blocked.add('impatto');
   if (cond.has('gravidanza')) { blocked.add('supino'); blocked.add('prono'); }
   if (['ipertensione', 'cuore', 'petto', 'gravidanza'].some((c) => cond.has(c))) { blocked.add('valsalva'); }
   if (cond.has('ipertensione') || cond.has('gravidanza')) blocked.add('testaGiu');
   if (cond.has('osteoporosi') || cond.has('schiena')) blocked.add('flessioneCarico');
+  if (cp?.body?.pas >= 160 || cp?.body?.pad >= 100) { blocked.add('valsalva'); blocked.add('testaGiu'); }
+
+  const exclude = new Set(ctx.excluded || []);
+  if (cond.has('polsi')) HAND_LOADED.forEach((id) => exclude.add(id));
+  if (cond.has('collo')) NECK_LOADED.forEach((id) => exclude.add(id));
+  if (cond.has('dorsale')) UPPER_BACK_LOADED.forEach((id) => exclude.add(id));
+  if (flags.shouldersStiff) ['v_lento', 'v_pike', 's_backsquat'].forEach((id) => exclude.add(id));
+
+  // preferenze tra esercizi equivalenti, in base ai limiti misurati
+  const prefer = {};
+  const bump = (ids, v) => ids.forEach((id) => { prefer[id] = (prefer[id] || 0) + v; });
+  if (flags.anklesStiff || flags.squatLimited) { bump(['s_squat_talloni'], 3); bump(['s_sitstand', 's_legpress', 's_goblet'], 1.5); bump(['s_squat', 's_squat_el', 's_backsquat'], -2.5); }
+  if (flags.shouldersStiff) { bump(['v_wallslide'], 3); bump(['r_ytw', 'r_el'], 1); }
+  if (flags.hamstringsTight) { bump(['h_ponte', 'h_hipthrust', 'h_ponte1'], 1.5); bump(['h_stacco', 'h_rdl'], -1.5); }
+  if (flags.coreWeak || sensitive.has('schiena') || cond.has('schiena')) { bump(['c_birddog', 'c_deadbug', 'c_curlup', 'c_pallof'], 1.5); bump(['c_hollow', 'c_crunch'], -2); }
+  if (cond.has('ginocchia') || sensitive.has('ginocchia')) bump(['s_sitstand', 'l_step', 'g_abd_el', 'g_clam', 'h_ponte'], 1);
 
   const hiitOk = !['cuore', 'petto', 'ipertensione', 'gravidanza', 'intervento'].some((c) => cond.has(c)) && bmi < 35 && p.eta < 70;
-
   const hrMax = Math.round(208 - 0.7 * p.eta);
   const steps = STEPS_MAP[p.passi] ?? 5000;
 
-  return { bmi, cond, equip, level, blocked, hiitOk, hrMax, steps, age: p.eta };
+  return {
+    bmi, cond, sensitive, pains, equip, level, pl, safety, blocked, hiitOk, hrMax, steps, age: p.eta,
+    cp, flags, exclude, prefer, hrRest: cp?.body?.hrRest || null, cardioL: lv.cardio ?? null,
+    maxes: cp?.maxes || {}, weakAreas: (cp?.weak || []).map((a) => a.id),
+    swaps: ctx.swaps || {}, exAdj: ctx.exAdj || {},
+  };
 }
 
-function allowed(ex, d) {
+function allowed(ex, d, slack = 0) {
+  const cap = (ex.cat === 'strength' && ex.pat && d.pl ? d.pl[ex.pat] : d.level) + slack;
   return ex.eq.some((e) => d.equip.has(e))
-    && ex.lvl <= d.level
+    && ex.lvl <= Math.min(cap, slack ? (d.safety ?? 3) : cap)
     && !ex.contra.some((c) => d.cond.has(c))
-    && !ex.tags.some((t) => d.blocked.has(t));
+    && !ex.tags.some((t) => d.blocked.has(t))
+    && !(d.exclude && d.exclude.has(ex.id));
 }
 
-export function allowedExercises(p) {
-  const d = derive(p);
+export function allowedExercises(p, ctx = {}) {
+  const d = derive(p, ctx);
   return EXERCISES.filter((e) => allowed(e, d));
 }
 
@@ -122,10 +186,31 @@ export function allowedExercises(p) {
 function pickPattern(pat, d, variant, used, preferLoad) {
   const list = EXERCISES.filter((e) => e.cat === 'strength' && e.pat === pat && allowed(e, d) && !used.has(e.id));
   if (!list.length) return null;
-  const score = (e) => e.lvl * 2 + (e.eq.includes('corpo') ? 0 : preferLoad ? 1.5 : 0.5);
+  const score = (e) => e.lvl * 2 + (e.eq.includes('corpo') ? 0 : preferLoad ? 1.5 : 0.5) + (d.prefer?.[e.id] || 0);
   list.sort((a, b) => score(b) - score(a));
   const top = list.slice(0, Math.min(3, list.length));
-  return top[variant % top.length];
+  let e = top[variant % top.length];
+  // sostituzione scelta dall'utente
+  const sw = d.swaps?.[e.id];
+  if (sw && BY_ID[sw] && !used.has(sw) && allowed(BY_ID[sw], d, 1)) e = BY_ID[sw];
+  // progressione / regressione del singolo esercizio in base al feedback
+  const adj = d.exAdj?.[e.id] || 0;
+  if (adj >= 2) {
+    const h = EXERCISES.filter((x) => x.cat === 'strength' && x.pat === pat && x.lvl > e.lvl && !used.has(x.id) && allowed(x, d, 1)).sort((a, b) => a.lvl - b.lvl)[0];
+    if (h) e = h;
+  } else if (adj <= -2) {
+    const lo = EXERCISES.filter((x) => x.cat === 'strength' && x.pat === pat && x.lvl < e.lvl && !used.has(x.id) && allowed(x, d)).sort((a, b) => b.lvl - a.lvl)[0];
+    if (lo) e = lo;
+  }
+  return e;
+}
+
+/** alternative possibili per un esercizio (stesso schema motorio o categoria), adatte all'utente */
+export function alternativesFor(id, p, ctx = {}) {
+  const ex = BY_ID[id];
+  if (!ex) return [];
+  const d = derive(p, { ...ctx, excluded: [] });
+  return EXERCISES.filter((e) => e.id !== id && e.cat === ex.cat && (ex.pat ? e.pat === ex.pat : true) && allowed(e, d, 1));
 }
 
 function pickMany(cat, d, n, variant = 0, exclude = []) {
@@ -164,16 +249,50 @@ export function mesoPhase(week) {
   };
 }
 
+const PUSH_TEST_EX = { classici: 'p_classici', ginocchia: 'p_ginocchia', rialzo: 'p_rialzo', muro: 'p_muro' };
+const round5 = (v) => Math.round(v / 5) * 5;
+
+function shiftReps(reps, delta) {
+  return reps.replace(/(\d+)(?:–(\d+))?/, (_, a, b) => {
+    const x = Math.max(3, +a + delta);
+    return b ? `${x}–${Math.max(x + 1, +b + delta)}` : String(x);
+  });
+}
+
 function dose(ex, goal, d, phase) {
-  let [sets, reps, rest] = DOSE[goal][d.level];
+  const L = ex.cat === 'strength' && ex.pat && d.pl ? d.pl[ex.pat] : d.level;
+  let [sets, reps, rest] = DOSE[goal][L];
   if (phase === 3) sets = Math.min(sets + 1, 5);
   if (phase === 4) sets = Math.max(sets - 1, 1);
+  const adj = clamp(d.exAdj?.[ex.id] || 0, -2, 2);
+  const m = d.maxes || {};
+  let basis = '';
   if (ex.unit === 'sec') {
-    const s = ex.id === 'c_farmer' ? 40 : SECS[d.level];
-    return { sets, text: `${sets} × ${s} s`, rest };
+    let s = ex.id === 'c_farmer' ? 40 : SECS[L];
+    const pm = m.plank;
+    if (pm) {
+      if ((ex.id === 'c_plank' && pm.variant === 'avambracci') || (ex.id === 'c_plank_g' && pm.variant === 'ginocchia')) { s = clamp(round5(pm.secs * 0.55), 10, 90); basis = `55% del tuo massimo (${pm.secs} s)`; }
+      else if (ex.id === 'c_plank_g' && pm.variant === 'avambracci') s = clamp(round5(pm.secs * 0.8), 15, 90);
+      else if (ex.id === 'c_side') s = clamp(round5(pm.secs * 0.35), 10, 60);
+    }
+    if (ex.id === 'r_towel' && m.hang) s = clamp(round5(m.hang * 0.5), 10, 45);
+    s = clamp(s + adj * 10, 10, 120);
+    return { sets, text: `${sets} × ${s} s`, rest, basis };
   }
+  const pu = m.pushup;
+  if (pu && PUSH_TEST_EX[pu.variant] === ex.id && pu.reps >= 3) {
+    const a = Math.max(3, Math.round(pu.reps * 0.5)), b = Math.max(a + 1, Math.round(pu.reps * 0.7));
+    reps = `${a}–${b}`; basis = `50–70% del tuo massimo (${pu.reps})`;
+  }
+  if (ex.id === 's_sitstand' && m.chair) {
+    const a = Math.max(5, Math.round(m.chair * 0.45)), b = Math.max(a + 2, Math.round(m.chair * 0.65));
+    reps = `${a}–${b}`; basis = `calibrato sulle tue ${m.chair} alzate in 30 s`;
+  }
+  if (adj) reps = shiftReps(reps, adj * 2);
+  if (adj >= 2) sets = Math.min(sets + 1, 5);
+  if (adj <= -2) sets = Math.max(sets - 1, 1);
   const perSide = ['l_step', 'l_affind', 'l_laterale', 'l_affman', 'l_bulgaro', 'r_man', 'h_ponte1', 'g_clam', 'g_kick', 'c_birddog', 'c_deadbug'].includes(ex.id);
-  return { sets, text: `${sets} × ${reps}${perSide ? ' per lato' : ''}`, rest };
+  return { sets, text: `${sets} × ${reps}${perSide ? ' per lato' : ''}`, rest, basis };
 }
 
 // ------------------------------------------------------------------
@@ -240,7 +359,7 @@ export const TYPE_KIND = {
 // Costruzione della singola sessione
 // ------------------------------------------------------------------
 
-const item = (ex, doseText, rest) => ({ id: ex.id, name: ex.n, how: ex.how, dose: doseText, rest: rest || 0 });
+const item = (ex, doseText, rest, tag) => ({ id: ex.id, name: ex.n, how: ex.how, dose: doseText, rest: rest || 0, ...(tag ? { tag } : {}) });
 
 function splitTime(min) {
   if (min <= 12) return { warm: 2, cool: 0 };
@@ -248,24 +367,51 @@ function splitTime(min) {
   return { warm: clamp(Math.round(min * 0.15), 4, 10), cool: clamp(Math.round(min * 0.1), 3, 10) };
 }
 
+// esercizi correttivi scelti in base ai limiti misurati
+function correctives(d, extraBalance) {
+  const f = d.flags || {};
+  const ids = [];
+  if (f.anklesStiff) ids.push('w_caviglie');
+  if (f.shouldersStiff) ids.push('w_angeli');
+  if (f.hamstringsTight) ids.push('w_hinge');
+  if (f.squatLimited) ids.push('w_squatmob');
+  if (f.coreWeak) ids.push('c_birddog');
+  if (f.balancePoor || extraBalance) ids.push('b_unagamba');
+  return [...new Set(ids)].map((id) => BY_ID[id]).filter((e) => e && allowed(e, d, 1));
+}
+
 function warmupBlock(min, d, variant, extraBalance) {
   const n = clamp(Math.round((min * 60) / 60), 2, 6);
-  const exs = pickMany('warmup', d, n, variant);
-  const secs = Math.round((min * 60) / Math.max(exs.length, 1));
-  const items = exs.map((e) => item(e, `${secs} s`));
-  if (extraBalance) {
-    const b = pickMany('balance', d, 1, variant)[0];
-    if (b) items.push(item(b, '2 × 30 s'));
-  }
+  const cor = correctives(d, extraBalance).slice(0, min >= 6 ? 3 : min >= 4 ? 2 : 1);
+  const generic = pickMany('warmup', d, Math.max(1, n - cor.length), variant, cor.map((e) => e.id));
+  const secs = Math.round((min * 60) / Math.max(generic.length + cor.length, 1));
+  const items = [
+    ...generic.map((e) => item(e, `${secs} s`)),
+    ...cor.map((e) => item(e, e.cat === 'balance' ? '2 × 20 s per lato' : `${Math.max(30, secs)} s`, 0, 'Correttivo')),
+  ];
   return { name: 'Riscaldamento', minutes: min, items };
+}
+
+function targetedStretches(d, p) {
+  const f = d.flags || {};
+  const ids = [];
+  if (f.hamstringsTight) ids.push('m_femorali');
+  if (f.anklesStiff) ids.push('m_polpacci');
+  if (f.shouldersStiff) ids.push('m_pett', 'm_openbook');
+  if (f.squatLimited) ids.push('m_flessori', 'm_9090');
+  if (p.lavoro === 'sedentario') ids.push('m_flessori');
+  if (d.sensitive?.has('schiena') || d.cond.has('schiena')) ids.push('m_bambino');
+  if (d.sensitive?.has('collo') || d.cond.has('collo')) ids.push('m_collo');
+  return [...new Set(ids)].map((id) => BY_ID[id]).filter((e) => e && allowed(e, d, 1));
 }
 
 function cooldownBlock(min, d, variant, p) {
   if (min <= 0) return null;
   const want = p.stress === 'alto' || d.cond.has('ipertensione');
-  const n = clamp(Math.floor(min * 60 / 50), 1, 6) - (want ? 1 : 0);
-  const exs = pickMany('mobility', d, Math.max(n, 1), variant + 1, ['m_respiro']);
-  const items = exs.map((e) => item(e, '40 s'));
+  const n = Math.max(1, clamp(Math.floor(min * 60 / 50), 1, 6) - (want ? 1 : 0));
+  const tgt = targetedStretches(d, p).slice(0, n);
+  const exs = pickMany('mobility', d, Math.max(n - tgt.length, 0), variant + 1, ['m_respiro', ...tgt.map((e) => e.id)]);
+  const items = [...tgt.map((e) => item(e, '45 s', 0, 'Mirato')), ...exs.slice(0, n - tgt.length).map((e) => item(e, '40 s'))];
   if (want) items.push(item(BY_ID.m_respiro, '2 min'));
   return { name: 'Defaticamento', minutes: min, items };
 }
@@ -278,7 +424,7 @@ function cardioModality(d, goal, variant, forInterval) {
     if (!e.eq.includes('corpo')) s += 2; // ha attrezzi dedicati
     if (forInterval && ['x_bici', 'x_salita', 'x_corsa', 'x_ellittica', 'x_vogatore'].includes(e.id)) s += 1;
     if (e.id === 'x_basso') s -= 1;
-    if (e.id === 'x_corsa' && goal !== 'resistenza' && (d.level === 1 || d.bmi >= 27)) s -= 4;
+    if (e.id === 'x_corsa' && goal !== 'resistenza' && (d.level === 1 || d.bmi >= 27 || (d.cardioL !== null && d.cardioL <= 2))) s -= 4;
     return s;
   };
   list.sort((a, b) => pref(b) - pref(a));
@@ -286,8 +432,15 @@ function cardioModality(d, goal, variant, forInterval) {
   return list[variant % Math.min(list.length, 3)] || BY_ID.x_cammino;
 }
 
-function zone(d, lo, hi) {
+// zone di frequenza cardiaca: Karvonen (con FC a riposo misurata) oppure % della FC massima
+function zone(d, kind) {
   if (d.cond.has('betabloccanti')) return '';
+  if (d.hrRest) {
+    const [lo, hi] = kind === 'hard' ? [0.8, 0.9] : [0.55, 0.7];
+    const r = d.hrMax - d.hrRest;
+    return ` (${Math.round(d.hrRest + r * lo)}–${Math.round(d.hrRest + r * hi)} bpm)`;
+  }
+  const [lo, hi] = kind === 'hard' ? [0.8, 0.9] : [0.6, 0.7];
   return ` (${Math.round(d.hrMax * lo)}–${Math.round(d.hrMax * hi)} bpm)`;
 }
 
@@ -300,14 +453,21 @@ function strengthSession(type, minutes, p, d, variant, phase) {
 
   const circuit = type === 'circuito' || minutes < 25;
   const preferLoad = goal === 'massa' || goal === 'tonificare';
-  const patterns = PATTERNS[type === 'circuito' ? 'full' : type];
+  let patterns = [...PATTERNS[type === 'circuito' ? 'full' : type]];
+  const weak = d.weakAreas || [];
+  if (['full', 'circuito'].includes(type)) {
+    if (weak.includes('forzaSup')) patterns = ['push_h', 'pull_h', ...patterns.filter((x) => x !== 'push_h' && x !== 'pull_h')];
+    if (weak.includes('forzaInf')) patterns.splice(2, 0, 'lunge');
+    if (weak.includes('core')) patterns.splice(3, 0, 'core');
+  } else if (type === 'upper' && weak.includes('core')) patterns.splice(4, 0, 'core');
+  else if (type === 'lower' && weak.includes('core')) patterns.splice(3, 0, 'core');
   const used = new Set();
   const chosen = [];
 
   let perEx;
   if (circuit) perEx = 1.1; // minuti per esercizio per giro
   else {
-    const [sets, , rest] = DOSE[goal][d.level];
+    const [sets, , rest] = DOSE[goal][Math.max(...Object.values(d.pl || { a: d.level }))];
     perEx = (sets * (40 + rest)) / 60 + 0.5;
   }
   const target = circuit ? clamp(Math.floor(main / 3 / perEx), 3, 8) : clamp(Math.floor(main / perEx), 2, 8);
@@ -334,11 +494,20 @@ function strengthSession(type, minutes, p, d, variant, phase) {
     mainBlock = {
       name: 'Parte principale', minutes: main,
       note: 'Esegui tutte le serie di un esercizio prima di passare al successivo. Ultime 2 ripetizioni impegnative ma con tecnica pulita.',
-      items: chosen.map((e) => { const ds = dose(e, goal, d, phase); return item(e, ds.text + ` · recupero ${ds.rest} s`, ds.rest); }),
+      items: chosen.map((e) => {
+        const ds = dose(e, goal, d, phase);
+        const it = item(e, ds.text + ` · recupero ${ds.rest} s`, ds.rest);
+        if (ds.basis) it.basis = ds.basis;
+        if (d.exAdj?.[e.id]) it.tag = d.exAdj[e.id] > 0 ? 'Progressione' : 'Regressione';
+        if (d.swaps && Object.values(d.swaps).includes(e.id)) it.tag = 'Scelto da te';
+        return it;
+      }),
     };
   }
 
   const blocks = [warmupBlock(warm, d, variant, d.age >= 65 || d.cond.has('osteoporosi')), mainBlock];
+  const prio = weak.map((w) => AREAS.find((a) => a.id === w)?.label).filter(Boolean);
+  if (prio.length && !circuit) mainBlock.note += ` Priorità per te: ${prio.join(' e ').toLowerCase()}.`;
   if (finisher) {
     const mod = cardioModality(d, goal, variant, true);
     blocks.push({
@@ -358,30 +527,33 @@ function cardioSession(type, minutes, p, d, variant, phase) {
   const { warm, cool } = splitTime(minutes);
   const main = minutes - warm - cool;
   let effType = type;
-  if (type === 'intervalli' && !d.hiitOk) effType = 'intervalli_moderati';
+  if (type === 'intervalli' && (!d.hiitOk || d.cardioL === 1)) effType = 'intervalli_moderati';
   const mod = cardioModality(d, goal, variant, effType.startsWith('intervalli'));
   let text;
   let note = '';
 
   if (effType === 'intervalli') {
-    const [w, r] = { 1: [30, 90], 2: [60, 60], 3: [120, 60] }[d.level];
+    const [w, r] = d.cardioL !== null ? { 2: [30, 90], 3: [60, 60], 4: [120, 60], 5: [180, 60] }[clamp(d.cardioL, 2, 5)] : { 1: [30, 90], 2: [60, 60], 3: [120, 60] }[d.level];
     const reps = Math.max(2, Math.floor((main * 60) / (w + r)) - (phase === 4 ? 1 : 0));
-    text = `${reps} × ${w < 60 ? w + ' s' : w / 60 + ' min'} forte${zone(d, 0.8, 0.9)} + ${r < 60 ? r + ' s' : r / 60 + ' min'} facile`;
+    text = `${reps} × ${w < 60 ? w + ' s' : w / 60 + ' min'} forte${zone(d, 'hard')} + ${r < 60 ? r + ' s' : r / 60 + ' min'} facile`;
     note = 'Nella parte "forte" fatica 7–8/10: parli a fatica. Nella parte facile recupera bene.';
   } else if (effType === 'intervalli_moderati') {
-    const reps = Math.max(2, Math.floor(main / 4));
-    text = `${reps} × 2 min a ritmo sostenuto + 2 min facile`;
+    const [w, r] = d.cardioL !== null && d.cardioL <= 2 ? [1, 2] : [2, 2];
+    const reps = Math.max(2, Math.floor(main / (w + r)));
+    text = `${reps} × ${w} min a ritmo sostenuto + ${r} min facile`;
     note = 'Intervalli moderati: nella parte sostenuta fatica 5–6/10, riesci ancora a dire frasi brevi.';
-  } else if (mod.id === 'x_corsa' && d.level < 3) {
-    const [run, walk] = d.level === 1 ? [1 + Math.min(phase, 3) - 1, 2] : [3 + Math.min(phase, 3), 1];
+  } else if (mod.id === 'x_corsa' && (d.cardioL !== null ? d.cardioL <= 3 : d.level < 3)) {
+    const beginner = d.cardioL !== null ? d.cardioL <= 2 : d.level === 1;
+    const [run, walk] = beginner ? [1 + Math.min(phase, 3) - 1, 2] : [3 + Math.min(phase, 3), 1];
     const reps = Math.max(2, Math.floor(main / (run + walk)));
     text = `${reps} × (${run} min corsa leggera + ${walk} min camminata)`;
     note = 'Metodo corsa-cammino: ogni settimana i tratti di corsa si allungano. Devi riuscire a parlare mentre corri.';
   } else {
-    text = `${main} min continui${zone(d, 0.6, 0.7)}`;
+    text = `${main} min continui${zone(d, 'z2')}`;
     note = 'Zona 2: respiro più veloce ma riesci a parlare in frasi complete. Fatica 4–5/10.';
   }
   if (type === 'lungo') note += ' Se nel weekend hai più tempo, allunga di 10–15 minuti: è l’allenamento che più migliora la resistenza.';
+  if (d.hrRest && !d.cond.has('betabloccanti')) note += ` Zone calcolate sulla tua FC a riposo di ${d.hrRest} bpm.`;
   if (d.cond.has('betabloccanti')) note += ' Con i betabloccanti la frequenza cardiaca non è affidabile: usa la fatica percepita.';
 
   const blocks = [
@@ -402,7 +574,8 @@ function mobilitySession(minutes, p, d, variant) {
   const per = 1; // minuti per esercizio
   const slots = Math.max(3, Math.floor((main - 2) / per));
   const flow = [];
-  const pool = [...exs, ...bal];
+  const tgt = targetedStretches(d, p);
+  const pool = [...tgt, ...exs.filter((e) => !tgt.includes(e)), ...bal];
   for (let i = 0; i < slots && pool.length; i++) flow.push(pool[i % pool.length]);
   const items = [...new Map(flow.map((e) => [e.id, e])).values()].map((e) => item(e, e.cat === 'balance' ? '2 × 30 s per lato' : '60 s'));
   const rounds = Math.max(1, Math.round(slots / items.length));
@@ -422,8 +595,8 @@ export function buildSession(type, minutes, p, d, variant, phase) {
   return strengthSession(type, minutes, p, d, variant, phase);
 }
 
-export function weekSchedule(p, week = 1) {
-  const d = derive(p);
+export function weekSchedule(p, week = 1, ctx = {}) {
+  const d = derive(p, ctx);
   const days = clamp(p.giorni, 2, 7);
   let tpl = [...TEMPLATES[p.obiettivo][days]];
   if (!d.hiitOk) tpl = tpl.map((t) => (t === 'circuito' && d.blocked.has('impatto') ? 'full' : t));
@@ -444,15 +617,20 @@ export function weekSchedule(p, week = 1) {
 // ------------------------------------------------------------------
 
 export function nutrition(p, opts = {}) {
-  const d = derive(p);
+  const d = derive(p, opts.ctx || {});
   const w = p.peso;
-  const bmr = 10 * w + 6.25 * p.altezza - 5 * p.eta + (p.sesso === 'M' ? 5 : -161);
+  const body = d.cp?.body || {};
+  const lean = body.leanMass || null;
+  const bf = body.bf ?? null;
+  // con la massa magra misurata uso Katch-McArdle, più preciso di Mifflin-St Jeor
+  const bmr = lean ? 370 + 21.6 * lean : 10 * w + 6.25 * p.altezza - 5 * p.eta + (p.sesso === 'M' ? 5 : -161);
   let pal = d.steps < 3000 ? 1.2 : d.steps < 5000 ? 1.25 : d.steps < 7500 ? 1.3 : d.steps < 10000 ? 1.4 : 1.5;
   if (p.lavoro === 'fisico') pal += 0.1; else if (p.lavoro === 'in_piedi') pal += 0.05;
   pal += clamp(p.giorni * p.minuti * 0.00035, 0, 0.3);
   const tdee = bmr * pal;
 
   const notes = [];
+  if (lean) notes.push(`Metabolismo calcolato sulla tua massa magra (${lean.toLocaleString('it-IT', { maximumFractionDigits: 1 })} kg, massa grassa ${bf.toLocaleString('it-IT', { maximumFractionDigits: 1 })}%) con la formula di Katch-McArdle.`);
   const goal = p.obiettivo;
   const minHealthy = 18.5 * (p.altezza / 100) ** 2;
   let target = p.pesoObiettivo ? Number(p.pesoObiettivo) : null;
@@ -472,7 +650,9 @@ export function nutrition(p, opts = {}) {
       notes.push('Il tuo peso è già nella fascia bassa: meglio puntare a tonificare (più muscolo) che a scendere ancora di peso.');
     } else {
       mode = 'deficit';
-      rate = clamp(w * (d.bmi >= 30 ? 0.0075 : 0.005), 0.25, 1.0);
+      let pct = d.bmi >= 30 ? 0.0075 : 0.005;
+      if (bf !== null) pct = bf >= (p.sesso === 'M' ? 25 : 32) ? 0.0075 : bf <= (p.sesso === 'M' ? 15 : 23) ? 0.0035 : 0.005;
+      rate = clamp(w * pct, 0.2, 1.0);
     }
   } else if (goal === 'massa') {
     if (d.bmi >= 27) {
@@ -504,8 +684,9 @@ export function nutrition(p, opts = {}) {
   }
   kcal = round(kcal, 10);
 
-  const refW = d.bmi >= 30 ? 25 * (p.altezza / 100) ** 2 : w;
+  let refW = d.bmi >= 30 ? 25 * (p.altezza / 100) ** 2 : w;
   let gkg = { deficit: 1.8, surplus: 1.8, mantenimento: goal === 'tonificare' || goal === 'massa' ? 1.8 : goal === 'resistenza' ? 1.5 : 1.3 }[mode];
+  if (lean) { refW = lean; gkg = { deficit: 2.3, surplus: 2.2, mantenimento: goal === 'tonificare' || goal === 'massa' ? 2.2 : goal === 'resistenza' ? 1.9 : 1.7 }[mode]; }
   if (d.cond.has('reni')) { gkg = 0.8; notes.push('Con una malattia renale le proteine vanno concordate con il nefrologo: il valore indicato è prudenziale.'); }
   if (d.cond.has('gravidanza')) gkg = Math.max(gkg, 1.2);
   const protein = round(refW * gkg, 5);
@@ -571,8 +752,8 @@ export function formatDate(iso) {
 // Abitudini e sicurezza
 // ------------------------------------------------------------------
 
-export function habits(p) {
-  const d = derive(p);
+export function habits(p, ctx = {}) {
+  const d = derive(p, ctx);
   const out = [];
   const stepsTarget = d.steps >= 10000 ? d.steps : clamp(round(d.steps + 2000, 500), 6000, 10000);
   out.push({
@@ -595,11 +776,21 @@ export function habits(p) {
   return out.sort((a, b) => a.priority - b.priority);
 }
 
-export function alerts(p) {
-  const d = derive(p);
+export function alerts(p, ctx = {}) {
+  const d = derive(p, ctx);
   const out = [];
   const stop = (text) => out.push({ level: 'stop', text });
   const warn = (text) => out.push({ level: 'attenzione', text });
+  for (const r of d.pains.filter((x) => x.v >= 3)) stop(`Dolore forte a: ${r.label.toLowerCase()}. Fallo valutare da un medico o fisioterapista prima di allenare quella zona. Nel frattempo il piano la esclude.`);
+  const mid = d.pains.filter((x) => x.v === 2).map((x) => x.label.toLowerCase());
+  if (mid.length) warn(`Dolore medio a: ${mid.join(', ')}. Ho escluso gli esercizi che caricano queste zone e scelto alternative più sicure.`);
+  const low = d.pains.filter((x) => x.v === 1).map((x) => x.label.toLowerCase());
+  if (low.length) warn(`Fastidio lieve a: ${low.join(', ')}. Per gli esercizi che coinvolgono queste zone parto da un livello più facile: se il fastidio supera 3/10, sostituisci l’esercizio.`);
+  const b = d.cp?.body || {};
+  if (b.pas >= 160 || b.pad >= 100) stop(`Pressione misurata ${b.pas}/${b.pad} mmHg: troppo alta per allenarsi in sicurezza. Ripeti la misura a riposo e senti il medico prima di iniziare.`);
+  else if (b.pas >= 140 || b.pad >= 90) warn(`Pressione misurata ${b.pas}/${b.pad} mmHg: sopra la norma. Misurala in giorni diversi e parlane con il medico; intanto niente carichi massimali.`);
+  if (b.hrRest >= 100) warn(`Frequenza cardiaca a riposo di ${b.hrRest} bpm: è alta. Ripeti la misura al mattino da seduto e, se resta sopra 100, consulta il medico.`);
+  if (b.whtr >= 0.6) warn(`Rapporto vita/altezza ${b.whtr.toFixed(2)}: indica grasso addominale elevato, il fattore di rischio più importante. È il primo indicatore che seguiremo.`);
   if (d.cond.has('petto')) stop('Dolore al petto, svenimenti o vertigini durante lo sforzo vanno valutati dal medico PRIMA di iniziare qualsiasi allenamento.');
   if (d.cond.has('cuore')) stop('Con problemi cardiaci serve il via libera del cardiologo (meglio con test da sforzo). Il piano usa solo intensità moderate.');
   if (d.cond.has('intervento')) stop('Dopo un intervento o un infortunio recente fatti autorizzare dal medico o dal fisioterapista. Il piano parte dal livello più semplice.');
@@ -619,21 +810,86 @@ export function alerts(p) {
 // Piano completo
 // ------------------------------------------------------------------
 
-export function generatePlan(p, opts = {}) {
+/**
+ * opts: { startISO, week, calorieAdjust, assess (ultima valutazione), swaps, excluded, exAdj }
+ */
+export function generatePlan(p, opts = {}) { return generatePlanFull(p, opts); }
+
+function generatePlanBase(p, opts = {}) {
   const startISO = opts.startISO || toISO(new Date());
   const week = opts.week || 1;
-  const d = derive(p);
-  const nutri = nutrition(p, opts);
+  const cp = computeProfile(p, opts.assess || {});
+  const ctx = { cp, swaps: opts.swaps, excluded: opts.excluded, exAdj: opts.exAdj };
+  const d = derive(p, ctx);
+  const nutri = nutrition(p, { ...opts, ctx });
   return {
-    derived: { bmi: +d.bmi.toFixed(1), level: d.level, hrMax: d.hrMax, hiitOk: d.hiitOk, blocked: [...d.blocked] },
+    derived: { bmi: +d.bmi.toFixed(1), level: d.level, pl: d.pl, hrMax: d.hrMax, hrRest: d.hrRest, hiitOk: d.hiitOk, blocked: [...d.blocked], excluded: [...d.exclude] },
     week,
     phase: mesoPhase(week),
-    schedule: weekSchedule(p, week),
+    schedule: weekSchedule(p, week, ctx),
     nutrition: nutri,
     timeline: timeline(p, nutri, startISO),
-    habits: habits(p),
-    alerts: alerts(p),
+    habits: habits(p, ctx),
+    alerts: alerts(p, ctx),
+    profile: cp,
+    _d: d,
+    personal: null,
   };
+}
+
+export function generatePlanFull(p, opts = {}) {
+  const plan = generatePlanBase(p, opts);
+  const used = new Set(plan.schedule.flatMap((x) => (x.session ? x.session.blocks.flatMap((b) => b.items.map((i) => i.id)) : [])));
+  plan.personal = personalFactors(p, plan._d, plan.profile, plan.nutrition, used);
+  delete plan._d;
+  return plan;
+}
+
+// ------------------------------------------------------------------
+// Spiegazione di come il piano è stato personalizzato
+// ------------------------------------------------------------------
+
+const EX_LVL = ['', 'base', 'intermedio', 'avanzato'];
+const it1 = (v) => Number(v).toLocaleString('it-IT', { maximumFractionDigits: 1 });
+
+export function personalFactors(p, d, cp, nutri, used = new Set()) {
+  const out = [];
+  const L = cp.levels;
+  const t = cp.tests;
+  if (cp.tested) {
+    const parts = [];
+    if (L.push !== null) parts.push(`spinta ${LEVEL_LABEL[L.push].toLowerCase()} → esercizi di livello ${EX_LVL[d.pl.push_h]}`);
+    if (L.pull !== null) parts.push(`tirata → livello ${EX_LVL[d.pl.pull_h]}`);
+    if (L.legs !== null) parts.push(`gambe ${LEVEL_LABEL[L.legs].toLowerCase()} → livello ${EX_LVL[d.pl.squat]}`);
+    if (L.core !== null) parts.push(`core ${LEVEL_LABEL[L.core].toLowerCase()} → livello ${EX_LVL[d.pl.core]}`);
+    if (L.cardio !== null) parts.push(`fiato ${LEVEL_LABEL[L.cardio].toLowerCase()}`);
+    out.push({ icon: '🎚️', title: 'Un livello per ogni capacità', text: `Dai tuoi test: ${parts.join('; ')}.` });
+  } else {
+    out.push({ icon: '🎚️', title: 'Livello stimato dall’esperienza', text: 'Fai la valutazione iniziale: ogni capacità avrà il suo livello e le dosi saranno calcolate sui tuoi risultati.' });
+  }
+  const doses = [];
+  const PT = { classici: 'p_classici', ginocchia: 'p_ginocchia', rialzo: 'p_rialzo', muro: 'p_muro' };
+  if (t.pushup && used.has(PT[t.pushup.variant])) doses.push(`piegamenti (${t.pushup.variant}) da ${Math.max(3, Math.round(t.pushup.value * 0.5))}–${Math.max(4, Math.round(t.pushup.value * 0.7))} ripetizioni, il 50–70% del tuo massimo di ${t.pushup.value}`);
+  if (t.plank && (used.has('c_plank') || used.has('c_plank_g'))) doses.push(`plank da ${Math.max(10, Math.round(t.plank.value * 0.55 / 5) * 5)} s, il 55% dei tuoi ${t.plank.value} s`);
+  if (t.chair && used.has('s_sitstand')) doses.push(`alzate dalla sedia calibrate sulle tue ${t.chair.value} in 30 s`);
+  if (doses.length) out.push({ icon: '🎯', title: 'Dosi calcolate sui tuoi test', text: doses.join('; ') + '.' });
+  if (cp.weak.length) out.push({ icon: '📌', title: `Punti deboli: ${cp.weak.map((a) => a.label.toLowerCase()).join(' e ')}`, text: 'Ricevono più lavoro: esercizi in apertura di sessione o un esercizio in più.' });
+  const f = cp.flags;
+  const fx = [];
+  if (f.anklesStiff) fx.push(`caviglie rigide (${t.ankle.value} cm al muro): mobilità della caviglia nel riscaldamento e squat con talloni rialzati`);
+  if (f.hamstringsTight) fx.push('femorali corti: cerniera d’anca nel riscaldamento, ponte glutei preferito allo stacco, allungamento dei femorali a fine sessione');
+  if (f.shouldersStiff) fx.push('spalle rigide: niente spinte pesanti sopra la testa, angeli al muro e allungamento dei pettorali');
+  if (f.squatLimited) fx.push('squat limitato: mezzo squat lento e mobilità delle anche (90/90, flessori)');
+  if (f.balancePoor) fx.push(`equilibrio da allenare (${t.balance.value} s su una gamba): esercizio di equilibrio in ogni riscaldamento`);
+  if (f.coreWeak) fx.push('core da rinforzare: attivazione con bird dog prima della parte principale');
+  if (fx.length) out.push({ icon: '🛠️', title: 'Correttivi su misura', text: fx.join('; ') + '.' });
+  if (d.pains.length) out.push({ icon: '🩹', title: 'Mappa dei dolori applicata', text: d.pains.map((r) => `${r.label.toLowerCase()} (${['', 'lieve', 'medio', 'forte'][r.v]})`).join(', ') + `: ${d.exclude.size} esercizi esclusi, livello ridotto dove c’è fastidio lieve.` });
+  if (d.hrRest) out.push({ icon: '❤️', title: 'Zone cardio sulla tua frequenza a riposo', text: `Con FC a riposo ${d.hrRest} bpm e massima stimata ${d.hrMax} bpm (metodo Karvonen): zona 2 ${Math.round(d.hrRest + (d.hrMax - d.hrRest) * 0.55)}–${Math.round(d.hrRest + (d.hrMax - d.hrRest) * 0.7)} bpm.` });
+  if (cp.levels.cardio !== null) out.push({ icon: '🫁', title: 'Intervalli adatti al tuo fiato', text: cp.levels.cardio <= 1 ? 'Solo intervalli moderati: 1 minuto sostenuto e 2 facili.' : cp.levels.cardio <= 2 ? 'Intervalli brevi: 30 secondi forti e 90 di recupero.' : cp.levels.cardio <= 3 ? 'Intervalli da 1 minuto forte e 1 di recupero.' : 'Intervalli lunghi da 2–3 minuti.' });
+  if (cp.body.leanMass) out.push({ icon: '⚖️', title: 'Calorie sulla tua massa magra', text: `${it1(cp.body.leanMass)} kg di massa magra (${it1(cp.body.bf)}% di grasso): metabolismo basale ${nutri.bmr} kcal, proteine ${nutri.protein} g calcolate sulla massa magra.` });
+  const nSw = Object.keys(d.swaps || {}).length, nEx = (d.exclude?.size || 0), nAdj = Object.values(d.exAdj || {}).filter(Boolean).length;
+  if (nSw || nAdj) out.push({ icon: '🔁', title: 'Il piano impara da te', text: `${nSw} esercizi sostituiti da te, ${nAdj} esercizi con difficoltà adattata in base al tuo feedback.` });
+  return out;
 }
 
 // ------------------------------------------------------------------

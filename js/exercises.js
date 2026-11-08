@@ -41,6 +41,7 @@ export const EXERCISES = [
 
   // ---------- FORZA: SQUAT ----------
   E('s_sitstand', 'Alzarsi e sedersi dalla sedia', 'strength', { pat: 'squat', how: 'Siediti appena, senza crollare, e rialzati spingendo dai talloni. Ottimo anche con ginocchia sensibili.' }),
+  E('s_squat_talloni', 'Squat con talloni rialzati', 'strength', { pat: 'squat', contra: ['ginocchia'], how: 'Talloni su un libro o un disco (2–3 cm): il busto resta più dritto anche con caviglie rigide.' }),
   E('s_squat', 'Squat a corpo libero', 'strength', { pat: 'squat', contra: ['ginocchia'], how: 'Piedi larghi quanto le spalle, scendi come per sederti, petto alto, ginocchia in linea con le punte.' }),
   E('s_squat_el', 'Squat con elastico', 'strength', { pat: 'squat', eq: ['elastici'], contra: ['ginocchia'], how: 'Elastico sotto i piedi e sulle spalle: stessa tecnica dello squat, salita controllata.' }),
   E('s_legpress', 'Leg press', 'strength', { pat: 'squat', eq: ['palestra'], how: 'Piedi alti sulla pedana; con ginocchia sensibili limita l’escursione a 90°.' }),
@@ -72,6 +73,7 @@ export const EXERCISES = [
   // ---------- FORZA: SPINTA ORIZZONTALE ----------
   E('p_muro', 'Piegamenti al muro', 'strength', { pat: 'push_h', how: 'Mani al muro all’altezza delle spalle, corpo dritto, porta il petto verso il muro.' }),
   E('p_rialzo', 'Piegamenti su rialzo (tavolo/divano)', 'strength', { pat: 'push_h', how: 'Mani su un appoggio stabile: più è basso, più è difficile. Corpo come una tavola.' }),
+  E('p_ginocchia', 'Piegamenti sulle ginocchia', 'strength', { pat: 'push_h', how: 'Ginocchia a terra, corpo dritto dalle spalle alle ginocchia, petto verso il pavimento.' }),
   E('p_el', 'Chest press con elastico', 'strength', { pat: 'push_h', eq: ['elastici'], how: 'Elastico dietro la schiena, spingi in avanti fino a braccia tese, ritorno lento.' }),
   E('p_floor', 'Distensioni a terra con manubri', 'strength', { pat: 'push_h', eq: ['manubri'], tags: ['supino'], how: 'Supino, gomiti a 45°: spingi i manubri verso l’alto, i gomiti toccano appena il pavimento.' }),
   E('p_machine', 'Chest press alla macchina', 'strength', { pat: 'push_h', eq: ['palestra'], how: 'Regola il sedile: maniglie all’altezza del petto, spinta senza bloccare i gomiti.' }),
@@ -105,6 +107,7 @@ export const EXERCISES = [
   // ---------- FORZA: CORE ----------
   E('c_birddog', 'Bird dog', 'strength', { pat: 'core', how: 'In quadrupedia allunga braccio e gamba opposti, bacino fermo. Alterna.' }),
   E('c_deadbug', 'Dead bug', 'strength', { pat: 'core', tags: ['supino'], how: 'Supino, braccia e ginocchia in alto: allunga braccio e gamba opposti con la schiena a terra.' }),
+  E('c_curlup', 'Curl-up di McGill', 'strength', { pat: 'core', tags: ['supino'], how: 'Supino, una gamba piegata, mani sotto la zona lombare: solleva di pochi cm testa e spalle come un blocco unico.' }),
   E('c_plank_g', 'Plank sulle ginocchia', 'strength', { pat: 'core', unit: 'sec', how: 'Avambracci e ginocchia a terra, linea dritta spalle-ginocchia. Respira.' }),
   E('c_pallof', 'Pallof press con elastico', 'strength', { pat: 'core', eq: ['elastici', 'palestra'], how: 'Elastico di lato, spingi le mani in avanti resistendo alla rotazione.' }),
   E('c_farmer', 'Camminata del contadino', 'strength', { pat: 'core', eq: ['manubri', 'palestra'], unit: 'sec', how: 'Un manubrio pesante per mano, cammina dritto con spalle basse e passo regolare.' }),

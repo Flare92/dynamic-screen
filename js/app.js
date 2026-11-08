@@ -1,6 +1,6 @@
 import {
   CONDITIONS, GOALS, EQUIPMENT, WEEKDAYS, WEEKDAYS_LONG, TYPE_KIND,
-  generatePlan, analyzeProgress, expectedWeight, buildSession, derive, allowedExercises,
+  generatePlan, analyzeProgress, expectedWeight, buildSession, derive, allowedExercises, alternativesFor,
   toISO, fromISO, addDays, daysBetween, weekdayIndex, formatDate,
 } from './engine.js';
 import { EXERCISES } from './exercises.js';
@@ -8,13 +8,18 @@ import { guideFor, MUSCLE_LABELS } from './guide.js';
 import { ICON, load3D, countUp, burst, haptic } from './fx.js';
 import { openSheet, closeSheet } from './sheet.js';
 import { openPlayer } from './player.js';
+import {
+  MEASURES, PAIN_REGIONS, PAIN_LEVELS, AREAS, LEVEL_LABEL, TEST_BY_ID,
+  computeProfile, precision, buildKpis, metric, kpiProgress,
+} from './assessment.js';
+import { startAssessment, renderAssessment, mountAssessment, handleAssessmentClick, assessmentActive, cancelAssessment } from './assess-ui.js';
 
 // ==================================================================
 // Stato (salvato solo sul dispositivo)
 // ==================================================================
 
 const KEY = 'ritmo.v1';
-const empty = () => ({ profile: null, planStart: null, calorieAdjust: 0, log: {}, weights: [] });
+const empty = () => ({ profile: null, planStart: null, calorieAdjust: 0, log: {}, weights: [], assess: [], swaps: {}, excluded: [], exAdj: {}, fbCount: 0 });
 
 function load() {
   try {
@@ -43,9 +48,22 @@ const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 function currentWeek() {
   return Math.max(1, Math.floor(daysBetween(fromISO(state.planStart), new Date()) / 7) + 1);
 }
-function getPlan(week = currentWeek()) {
-  return generatePlan(state.profile, { startISO: state.planStart, week, calorieAdjust: state.calorieAdjust });
+// unisce tutte le valutazioni: i test più recenti sostituiscono quelli vecchi
+function mergedAssess(upTo = state.assess.length) {
+  const out = { results: {}, meas: { ...(state.profile?.misure || {}) } };
+  for (const e of state.assess.slice(0, upTo)) { Object.assign(out.results, e.results || {}); Object.assign(out.meas, e.meas || {}); }
+  return out;
 }
+const latestWeight = () => ([...state.weights].sort((a, b) => a.date.localeCompare(b.date)).pop()?.kg ?? state.profile.peso);
+function getPlan(week = currentWeek()) {
+  return generatePlan(state.profile, {
+    startISO: state.planStart, week, calorieAdjust: state.calorieAdjust,
+    assess: mergedAssess(), swaps: state.swaps, excluded: state.excluded, exAdj: state.exAdj,
+  });
+}
+const planCtx = () => ({ cp: computeProfile(state.profile, mergedAssess()), swaps: state.swaps, excluded: state.excluded, exAdj: state.exAdj });
+const precisionNow = () => precision(state.profile, mergedAssess(), { feedbacks: state.fbCount || 0, retests: Math.max(0, state.assess.length - 1), excludeTests: Object.values(TEST_BY_ID).filter((t) => t.when(state.profile, mergedAssess().results)).map((t) => t.id) });
+const daysSinceAssess = () => (state.assess.length ? daysBetween(fromISO(state.assess[state.assess.length - 1].date), new Date()) : null);
 function dayLog(iso) {
   if (!state.log[iso]) state.log[iso] = { done: false, items: [], habits: {} };
   return state.log[iso];
@@ -66,16 +84,19 @@ function route() {
   const hash = location.hash.replace('#/', '') || 'oggi';
   if (!state.profile && hash !== 'setup' && hash !== 'benvenuto') { location.replace('#/benvenuto'); }
   const page = state.profile ? (hash === 'benvenuto' ? 'oggi' : hash) : (hash === 'setup' ? 'setup' : 'benvenuto');
-  const withTabs = !['setup', 'benvenuto'].includes(page);
+  const withTabs = !['setup', 'benvenuto', 'valutazione'].includes(page);
+  if (page !== 'valutazione' && assessmentActive()) cancelAssessment();
+  if (page === 'valutazione' && !assessmentActive()) beginAssessment();
   $tabbar.hidden = !withTabs;
   document.body.classList.toggle('no-tabs', !withTabs);
   $tabbar.querySelectorAll('a').forEach((a) => a.classList.toggle('on', a.dataset.tab === page));
 
   if (page !== 'benvenuto') disposeHero();
   if (page === 'setup' && !draft) initDraft(!!state.profile);
-  const views = { benvenuto: viewWelcome, setup: viewWizard, oggi: viewToday, piano: viewPlan, esercizi: viewLibrary, progressi: viewProgress, profilo: viewProfile };
+  const views = { benvenuto: viewWelcome, setup: viewWizard, oggi: viewToday, piano: viewPlan, esercizi: viewLibrary, progressi: viewProgress, profilo: viewProfile, valutazione: renderAssessment, partenza: viewStart };
   $app.innerHTML = (views[page] || viewToday)();
   if (page === 'setup') bindWizardInputs();
+  if (page === 'valutazione') mountAssessment();
   if (page === 'benvenuto') mountHero();
   countUp($app);
 }
@@ -164,10 +185,28 @@ const STEPS = [
     },
   },
   {
+    title: 'Le tue misure', sub: 'Con un metro da sarta. Servono per stimare massa grassa e massa magra e per misurare i progressi meglio della bilancia. Puoi lasciarle vuote e farle dopo.',
+    render: (d) => MEASURES.filter((m) => !m.sex || m.sex === d.sesso).map((m) => `<label class="field"><span>${m.label} (${m.unit})${m.optional ? ' · facoltativa' : ''}</span><input type="number" inputmode="decimal" name="mis_${m.id}" value="${esc(d.misure?.[m.id] ?? '')}"><small>${m.how}</small></label>`).join(''),
+    validate: (d) => {
+      for (const m of MEASURES) {
+        const v = d.misure?.[m.id];
+        if (v !== undefined && v !== '' && !(v >= m.min && v <= m.max)) return `${m.label}: il valore non sembra corretto (${m.min}–${m.max} ${m.unit}).`;
+      }
+      if (d.misure?.vita && d.misure?.collo && d.misure.vita <= d.misure.collo) return 'La vita deve essere più grande del collo: ricontrolla le misure.';
+      return null;
+    },
+  },
+  {
     title: 'La tua salute', sub: 'Seleziona tutto ciò che ti riguarda. Se non hai nulla, vai avanti.',
     render: (d) => `
       ${chips('condizioni', CONDITIONS, d.condizioni)}
       <label class="field"><span>Farmaci, infortuni o altro (facoltativo)</span><textarea name="note" placeholder="Es. operato al menisco destro nel 2022">${esc(d.note)}</textarea><small>Resta sul tuo telefono. Parlane anche con il medico.</small></label>`,
+    validate: () => null,
+  },
+  {
+    title: 'Dolori e fastidi', sub: 'Dove senti dolore oggi, anche fuori dall’allenamento? Il piano esclude o rende più facili gli esercizi che caricano quella zona.',
+    render: (d) => `<div class="pain-list">${PAIN_REGIONS.map((r) => `<div class="pain-row"><span>${r.label}</span>${seg('dol_' + r.id, PAIN_LEVELS, d.dolori?.[r.id] ?? 0)}</div>`).join('')}</div>
+      <p class="small muted">Lieve: fastidio che non limita. Medio: limita alcuni movimenti. Forte: limita la vita quotidiana.</p>`,
     validate: () => null,
   },
   {
@@ -245,6 +284,12 @@ function bindWizardInputs() {
   document.getElementById('wizard').addEventListener('input', (e) => {
     const el = e.target;
     if (!el.name) return;
+    if (el.name.startsWith('mis_')) {
+      draft.misure = draft.misure || {};
+      const k = el.name.slice(4);
+      if (el.value === '') delete draft.misure[k]; else draft.misure[k] = Number(el.value);
+      return;
+    }
     draft[el.name] = el.type === 'number' || el.type === 'range' ? (el.value === '' ? '' : Number(el.value)) : el.value;
     if (el.name === 'minuti') {
       document.getElementById('min-out').textContent = el.value;
@@ -260,7 +305,7 @@ function updateWeekTotal() {
 
 function initDraft(edit) {
   draft = edit && state.profile ? structuredClone(state.profile) : {
-    nome: '', condizioni: [], attrezzi: [], minuti: 30, giorni: 3, sonno: '', note: '', traguardo: '', pesoObiettivo: '', dataObiettivo: '',
+    nome: '', condizioni: [], attrezzi: [], misure: {}, dolori: {}, minuti: 30, giorni: 3, sonno: '', note: '', traguardo: '', pesoObiettivo: '', dataObiettivo: '',
   };
   draft._edit = edit;
   wizardStep = 0;
@@ -285,6 +330,7 @@ function finishWizard() {
   else state.weights = state.weights.map((w) => (w.date === today() ? { ...w, kg: p.peso } : w));
   save();
   draft = null;
+  if (!wasEdit && !state.assess.length) { location.hash = '#/valutazione'; toast('Profilo creato: ora misuriamo il tuo punto di partenza'); return; }
   location.hash = '#/piano';
   setTimeout(() => burst(innerWidth / 2, innerHeight * 0.3), 350);
   toast(wasEdit ? 'Piano aggiornato' : 'Il tuo piano è pronto');
@@ -345,6 +391,7 @@ function viewToday() {
   <nav class="weekstrip ${R(2)}" aria-label="Settimana">${strip}</nav>
   <div class="stack">
     ${stops.length ? `<a href="#/piano" class="alert stop ${R(3)}" style="text-decoration:none"><span>⚠︎</span><span><b>Prima di iniziare:</b> ${esc(stops[0].text)}${stops.length > 1 ? ` (+${stops.length - 1})` : ''}</span></a>` : ''}
+    ${isToday ? assessCard() : ''}
     ${session ? sessionCard(session, iso, lg, moved) : restCard(plan, iso, lg)}
     ${isToday ? habitsCard(plan, iso) : ''}
     ${isToday && needWeigh ? `
@@ -380,12 +427,13 @@ function sessionCard(s, iso, lg, moved) {
         n++;
         return `<div class="ex ${on ? 'done' : ''}">
           <span class="ex-idx">${String(n).padStart(2, '0')}</span>
-          <div class="ex-body" data-action="open-ex" data-id="${it.id}" data-dose="${esc(it.dose)}">
+          <div class="ex-body" data-action="open-ex" data-id="${it.id}" data-dose="${esc(it.dose)}" data-swap="1">
             <div class="ex-name">${esc(it.name)}</div>
             <div class="ex-dose">${esc(it.dose)}</div>
+            ${it.tag ? `<span class="tag">${esc(it.tag)}</span>` : ''}${it.basis ? `<div class="ex-basis">◎ ${esc(it.basis)}</div>` : ''}
           </div>
           <div class="ex-tools">
-            <button class="icon-btn three" data-action="open-ex" data-id="${it.id}" data-dose="${esc(it.dose)}" aria-label="Guarda in 3D">${ICON.cube}</button>
+            <button class="icon-btn three" data-action="open-ex" data-id="${it.id}" data-dose="${esc(it.dose)}" data-swap="1" aria-label="Guarda in 3D">${ICON.cube}</button>
             ${future ? '' : `<button class="check ${on ? 'on' : ''}" data-action="toggle-item" data-key="${key}" data-iso="${iso}" aria-label="Fatto">✓</button>`}
           </div>
         </div>`;
@@ -555,7 +603,14 @@ function viewPlan() {
     ${plan.habits.map((h) => `<div class="tip"><span class="ti">${h.icon}</span><div><b>${esc(h.title)}</b><p class="small muted" style="margin-top:2px">${esc(h.text)}</p></div></div>`).join('')}
   </section>
 
-  <div class="section-title"><h2>Come è stato costruito</h2></div>
+  <div class="section-title"><h2>Personalizzazione</h2><a class="link small" href="#/partenza">Punto di partenza →</a></div>
+  ${precisionCard()}
+  <section class="card" style="margin-top:12px">
+    ${plan.personal.map((f) => `<div class="tip"><span class="ti">${f.icon}</span><div><b>${esc(f.title)}</b><p class="small muted" style="margin-top:2px">${esc(f.text)}</p></div></div>`).join('')}
+  </section>
+  ${kpiSection(plan)}
+
+  <div class="section-title"><h2>Parametri di base</h2></div>
   <section class="card">
     <div class="list-row"><span>BMI</span><span>${fmt(plan.derived.bmi, 1)} · ${bmiLabel(plan.derived.bmi)}</span></div>
     <div class="list-row"><span>Livello esercizi</span><span>${['', 'Base', 'Intermedio', 'Avanzato'][plan.derived.level]}</span></div>
@@ -565,6 +620,174 @@ function viewPlan() {
     ${p.condizioni?.length ? `<div class="list-row"><span>Condizioni</span><span>${p.condizioni.map((c) => CONDITIONS.find((x) => x.id === c)?.label).join(', ')}</span></div>` : ''}
   </section>
   <p class="disclaimer">Ritmo fornisce indicazioni generali e non sostituisce medici, fisioterapisti o nutrizionisti. Se senti dolore, fermati.</p>`;
+}
+
+// ==================================================================
+// Valutazione e punto di partenza
+// ==================================================================
+
+function beginAssessment() {
+  const retest = state.assess.length > 0;
+  startAssessment({
+    profile: state.profile, retest, withMeasures: retest,
+    onDone: (entry) => {
+      entry.date = today();
+      if (!retest) entry.meas = { ...(state.profile.misure || {}), ...entry.meas };
+      if (entry.meas.peso) {
+        state.weights = state.weights.filter((w) => w.date !== today());
+        state.weights.push({ date: today(), kg: entry.meas.peso });
+        delete entry.meas.peso;
+      }
+      state.assess.push(entry);
+      save();
+      location.hash = '#/partenza';
+      setTimeout(() => burst(innerWidth / 2, innerHeight * 0.3), 400);
+    },
+    onCancel: () => { location.hash = '#/oggi'; },
+  });
+}
+
+function assessCard() {
+  const since = daysSinceAssess();
+  const pr = precisionNow();
+  if (since === null) {
+    return `<a href="#/valutazione" class="card glow ${R(3)}" style="display:block;text-decoration:none">
+      <div class="row between"><span class="chip cyan live"><i></i>Da fare</span><span class="mono small muted">PRECISIONE ${pr.pct}%</span></div>
+      <h2 style="margin-top:12px">Misura il tuo punto di partenza</h2>
+      <p class="muted small" style="margin-top:6px">15 minuti di test guidati in 3D: il piano userà i tuoi risultati per livelli, dosi, correttivi e traguardi. Precisione stimata dopo i test: oltre 85%.</p>
+      <div class="prec-bar" style="margin-top:14px"><i style="width:${pr.pct}%"></i><b style="left:88%"></b></div>
+    </a>`;
+  }
+  if (since >= 28) {
+    return `<a href="#/valutazione" class="card glow ${R(3)}" style="display:block;text-decoration:none">
+      <span class="chip volt live"><i></i>Test di controllo</span>
+      <h2 style="margin-top:12px">Sono passate ${Math.floor(since / 7)} settimane</h2>
+      <p class="muted small" style="margin-top:6px">Rifai i test per misurare i progressi reali e aggiornare livelli e dosi.</p>
+    </a>`;
+  }
+  return '';
+}
+
+function precisionCard() {
+  const pr = precisionNow();
+  const top = pr.missing.sort((a, b) => b.gain - a.gain).slice(0, 4);
+  return `<section class="card glow">
+    <div class="session-hero">
+      ${ring(pr.pct / 100, `${pr.pct}<span style="font-size:12px">%</span>`, 'PRECISIONE')}
+      <div>
+        <h3>Precisione del piano</h3>
+        <p class="small muted" style="margin-top:4px">Quanto il piano si basa su dati misurati su di te invece che su stime generiche.</p>
+      </div>
+    </div>
+    ${top.length ? `<p class="sub-h">Per aumentarla</p>${top.map((m) => `<div class="list-row"><span>${esc(m.label)}</span><span class="mono" style="color:var(--volt)">+${m.gain}%</span></div>`).join('')}
+    <a class="btn ghost wide" style="margin-top:12px" href="#/valutazione">${state.assess.length ? 'Completa i test' : 'Fai la valutazione'}</a>` : ''}
+  </section>`;
+}
+
+function kpiSection(plan, progress = false) {
+  if (!state.assess.length && !state.profile.misure?.vita) return '';
+  const base = state.assess.length ? { results: state.assess[0].results, meas: { ...(state.profile.misure || {}), ...(state.assess[0].meas || {}) } } : { results: {}, meas: state.profile.misure || {} };
+  const kpis = buildKpis(state.profile, base, plan.nutrition, plan.timeline);
+  if (!kpis.length) return '';
+  const cur = mergedAssess();
+  const w = latestWeight();
+  const f = (k, v) => (v === null || v === undefined ? '–' : Number(v).toLocaleString('it-IT', { minimumFractionDigits: k.dec, maximumFractionDigits: k.dec }));
+  return `
+  <div class="section-title"><h2>${progress ? 'Traguardi misurabili' : 'Traguardi misurabili'}</h2><span class="chip">${kpis.length} indicatori</span></div>
+  <section class="card">
+    ${kpis.map((k) => {
+      const c = metric(k.id, state.profile, cur, w);
+      const pg = kpiProgress(k, c);
+      const eta = formatDate(toISO(addDays(fromISO(state.planStart), k.weeks * 7)));
+      return `<div class="kpi">
+        <div class="row between"><b>${k.label}</b><span class="mono small muted">entro ${eta}</span></div>
+        <div class="kpi-vals"><span>${f(k, k.base)}</span><span class="kpi-arrow">→</span><span class="kpi-target">${f(k, k.target)} ${k.unit}</span>${progress && c !== null ? `<span class="kpi-now">oggi ${f(k, c)}</span>` : ''}</div>
+        <div class="bar"><i style="width:${Math.max(0, Math.min(100, (pg ?? 0) * 100))}%"></i></div>
+        ${k.note ? `<p class="small muted" style="margin-top:4px">${esc(k.note)}</p>` : ''}
+      </div>`;
+    }).join('')}
+  </section>`;
+}
+
+function radar(areas, compare) {
+  const N = AREAS.length, cx = 150, cy = 140, R0 = 96;
+  const pt = (i, v) => { const a = -Math.PI / 2 + (i / N) * Math.PI * 2; return [cx + Math.cos(a) * R0 * v, cy + Math.sin(a) * R0 * v]; };
+  const poly = (vals) => vals.map((v, i) => pt(i, Math.max(0.04, (v ?? 0) / 5)).map((x) => x.toFixed(1)).join(',')).join(' ');
+  const rings = [0.2, 0.4, 0.6, 0.8, 1].map((r) => `<polygon class="r-grid" points="${AREAS.map((_, i) => pt(i, r).join(',')).join(' ')}"/>`).join('');
+  const axes = AREAS.map((_, i) => `<line class="r-grid" x1="${cx}" y1="${cy}" x2="${pt(i, 1)[0]}" y2="${pt(i, 1)[1]}"/>`).join('');
+  const labels = AREAS.map((a, i) => {
+    const [x, y] = pt(i, 1.2);
+    const v = areas[a.id];
+    return `<text class="r-lbl" x="${x}" y="${y}" text-anchor="${x < cx - 5 ? 'end' : x > cx + 5 ? 'start' : 'middle'}">${a.short}</text><text class="r-val" x="${x}" y="${y + 12}" text-anchor="${x < cx - 5 ? 'end' : x > cx + 5 ? 'start' : 'middle'}">${v === null ? 'da testare' : LEVEL_LABEL[Math.round(v)].toUpperCase()}</text>`;
+  }).join('');
+  const vals = AREAS.map((a) => areas[a.id]);
+  return `<svg class="radar" viewBox="0 0 300 290" role="img" aria-label="Profilo delle capacità">
+    ${rings}${axes}
+    ${compare ? `<polygon class="r-old" points="${poly(AREAS.map((a) => compare[a.id]))}"/>` : ''}
+    <polygon class="r-val-poly" points="${poly(vals)}"/>
+    ${vals.map((v, i) => (v === null ? '' : `<circle class="r-dot" cx="${pt(i, v / 5)[0]}" cy="${pt(i, v / 5)[1]}" r="3.5"/>`)).join('')}
+    ${labels}
+  </svg>`;
+}
+
+function viewStart() {
+  const p = state.profile;
+  const plan = getPlan();
+  const cp = plan.profile;
+  const first = state.assess.length > 1 ? computeProfile(p, { results: state.assess[0].results, meas: { ...(p.misure || {}), ...state.assess[0].meas } }) : null;
+  const b = cp.body;
+  const TEST_ORDER = ['pushup', 'hang', 'chair', 'plank', 'cardioSelf', 'step', 'toetouch', 'shoulder', 'ankle', 'squatdeep', 'balance'];
+  const unit = { pushup: 'rip.', hang: 's', chair: 'alzate', plank: 's', step: 'bpm', ankle: 'cm', balance: 's', cardioSelf: '/5', toetouch: '/5', shoulder: '/5', squatdeep: '/5' };
+  const lvChip = (l) => `<span class="chip ${l >= 4 ? 'volt' : l === 3 ? 'cyan' : 'hot'}">${LEVEL_LABEL[l]}</span>`;
+  const summary = [];
+  if (cp.strong.length) summary.push(`I tuoi punti di forza: <b>${cp.strong.map((a) => a.label.toLowerCase()).join(' e ')}</b>.`);
+  if (cp.weak.length) summary.push(`Da migliorare per primi: <b>${cp.weak.map((a) => a.label.toLowerCase()).join(' e ')}</b>.`);
+  return `
+  <header class="hdr ${R(0)}"><div><p class="kicker">${state.assess.length ? 'Aggiornato al ' + formatDate(state.assess[state.assess.length - 1].date) : 'Nessun test ancora'}</p><h1>Punto di partenza</h1></div></header>
+  <section class="card glow ${R(1)}" style="margin-top:16px">
+    ${radar(cp.areas, first?.areas)}
+    ${first ? '<div class="legend" style="justify-content:center"><span><i style="background:var(--volt)"></i>Oggi</span><span><i style="background:var(--ink-3)"></i>Valutazione iniziale</span></div>' : ''}
+    ${summary.length ? `<p style="margin-top:12px">${summary.join(' ')}</p>` : '<p class="muted" style="margin-top:12px">Fai i test per completare il tuo profilo.</p>'}
+  </section>
+  ${precisionCard()}
+
+  <div class="section-title"><h2>Composizione corporea</h2></div>
+  <section class="card ${R(2)}">
+    <div class="stats">
+      <div class="stat"><b>${b.bf !== null ? fmt(b.bf, 1) : '–'}<small style="font-size:14px">${b.bf !== null ? '%' : ''}</small></b><span>massa grassa</span></div>
+      <div class="stat"><b>${b.leanMass !== null ? fmt(b.leanMass, 1) : '–'}</b><span>kg magri</span></div>
+      <div class="stat"><b>${b.whtr ? b.whtr.toLocaleString('it-IT') : '–'}</b><span>vita/altezza</span></div>
+    </div>
+    <div style="margin-top:10px">
+      ${b.bfLabel ? `<div class="list-row"><span>Massa grassa</span><span>${b.bfLabel} · ${fmt(b.fatMass, 1)} kg</span></div>` : '<div class="list-row"><span>Massa grassa</span><span>servono vita e collo' + (p.sesso === 'F' ? ' e fianchi' : '') + '</span></div>'}
+      ${b.whtrLabel ? `<div class="list-row"><span>Grasso addominale</span><span>${b.whtrLabel}</span></div>` : ''}
+      <div class="list-row"><span>BMI</span><span>${fmt(b.bmi, 1)} · ${bmiLabel(b.bmi)}</span></div>
+      ${b.hrRest ? `<div class="list-row"><span>FC a riposo</span><span>${b.hrRest} bpm · ${['', 'alta', 'da migliorare', 'nella media', 'buona', 'ottima'][b.hrLevel]}</span></div>` : ''}
+      ${b.pas ? `<div class="list-row"><span>Pressione</span><span>${b.pas}/${b.pad ?? '–'} mmHg</span></div>` : ''}
+    </div>
+  </section>
+
+  <div class="section-title"><h2>Risultati dei test</h2></div>
+  <section class="card ${R(3)}">
+    ${TEST_ORDER.filter((id) => cp.tests[id]).map((id) => {
+      const t = cp.tests[id];
+      const T = TEST_BY_ID[id];
+      const old = first?.tests[id];
+      return `<div class="test-row">
+        <div class="grow"><b>${T.title}</b><p class="small muted">${t.value} ${unit[id] || ''}${t.variant ? ' · ' + t.variant : ''}${old && old.value !== t.value ? ` · prima ${old.value}` : ''}</p>
+        <div class="lvl-dots">${[1, 2, 3, 4, 5].map((i) => `<i class="${i <= t.level ? 'on' : ''}"></i>`).join('')}</div></div>
+        ${lvChip(t.level)}
+      </div>`;
+    }).join('') || '<p class="muted">Ancora nessun test.</p>'}
+    <a class="btn primary wide" style="margin-top:14px" href="#/valutazione">${state.assess.length ? 'Rifai o completa i test' : 'Inizia i test'}</a>
+  </section>
+
+  <div class="section-title"><h2>Cosa cambia nel tuo piano</h2></div>
+  <section class="card ${R(4)}">
+    ${plan.personal.map((f) => `<div class="tip"><span class="ti">${f.icon}</span><div><b>${esc(f.title)}</b><p class="small muted" style="margin-top:2px">${esc(f.text)}</p></div></div>`).join('')}
+  </section>
+  ${kpiSection(plan)}
+  <p class="disclaimer">I valori di riferimento sono indicativi (ACSM, YMCA, Senior Fitness Test, formula U.S. Navy) e servono a orientare il piano, non a fare diagnosi.</p>`;
 }
 
 function bmiLabel(b) {
@@ -639,6 +862,13 @@ function viewProgress() {
       <span>${esc(s.text)}</span>
       ${s.action ? `<button class="btn ghost small" style="align-self:flex-start" data-action="apply" data-i="${i}">${esc(s.action.label)}</button>` : ''}
     </div>`).join('')}</div>` : ''}
+
+  ${kpiSection(getPlan(), true)}
+  <div class="section-title"><h2>Valutazioni</h2><a class="link small" href="#/partenza">Dettagli →</a></div>
+  <section class="card">
+    ${state.assess.length ? state.assess.map((a, i) => `<div class="list-row"><span>${i ? 'Controllo' : 'Valutazione iniziale'} · ${formatDate(a.date)}</span><span>${Object.keys(a.results || {}).filter((k) => !k.endsWith('Var')).length} test</span></div>`).join('') : '<p class="muted small">Nessuna valutazione ancora.</p>'}
+    <a class="btn ghost wide" style="margin-top:12px" href="#/valutazione">${state.assess.length ? 'Fai il test di controllo' : 'Fai la valutazione iniziale'}</a>
+  </section>
 
   <div class="section-title"><h2>Peso</h2>${last ? `<span class="mono small muted">${fmt(last.kg, 1)} KG · ${diff > 0 ? '+' : ''}${fmt(diff, 1)}</span>` : ''}</div>
   <section class="card ${R(3)}">
@@ -752,6 +982,8 @@ function viewProfile() {
       <button class="btn ghost" data-action="export">Esporta</button>
       <label class="btn ghost" style="cursor:pointer">Importa<input type="file" accept="application/json" data-action="import" hidden></label>
     </div>
+    <a class="btn ghost wide" href="#/valutazione">Rifai la valutazione</a>
+    ${Object.keys(state.swaps).length || state.excluded.length || Object.keys(state.exAdj).length ? `<button class="btn line wide" data-action="reset-choices">Ripristina esercizi sostituiti ed esclusi (${Object.keys(state.swaps).length + state.excluded.length})</button>` : ''}
     <button class="btn line wide" data-action="restart-plan">Ricomincia il piano da oggi</button>
     <button class="btn danger wide" data-action="reset">Cancella tutti i dati</button>
   </section>
@@ -804,18 +1036,32 @@ function startPlayer(iso) {
     doneKeys: lg.items,
     onItemDone: (key) => { const l = dayLog(iso); if (!l.items.includes(key)) l.items.push(key); save(); },
     onFinish: (fb) => markDone(iso, fb),
+    onExFeedback: (exId, fb) => {
+      state.fbCount = (state.fbCount || 0) + 1;
+      if (fb === 'dolore') {
+        if (!state.excluded.includes(exId)) state.excluded.push(exId);
+        delete state.exAdj[exId];
+      } else {
+        const d = { facile: 1, giusto: 0, duro: -1 }[fb];
+        state.exAdj[exId] = Math.max(-2, Math.min(2, (state.exAdj[exId] || 0) + d));
+        if (!state.exAdj[exId]) delete state.exAdj[exId];
+      }
+      save();
+    },
     onClose: () => rerender(),
   });
 }
 
 document.addEventListener('click', (e) => {
+  if (location.hash === '#/valutazione' && handleAssessmentClick(e, rerender)) return;
   const t = e.target.closest('[data-action], .seg button, .chips[data-multi] button, .goal-grid button');
   if (!t || t.closest('#player') || t.closest('.sheet')) return;
 
   const segEl = t.parentElement?.closest('.seg[data-name], .goal-grid[data-name]');
   if (segEl && draft && !t.dataset.action) {
     const name = segEl.dataset.name;
-    draft[name] = ['sonno', 'giorni'].includes(name) ? Number(t.dataset.value) : t.dataset.value;
+    if (name.startsWith('dol_')) { draft.dolori = draft.dolori || {}; draft.dolori[name.slice(4)] = Number(t.dataset.value); }
+    else draft[name] = ['sonno', 'giorni'].includes(name) ? Number(t.dataset.value) : t.dataset.value;
     segEl.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === t));
     if (name === 'giorni') updateWeekTotal();
     haptic(8);
@@ -852,7 +1098,28 @@ document.addEventListener('click', (e) => {
       break;
     }
     case 'pick-day': selectedDay = Number(t.dataset.day); showFeedback = false; rerender(); break;
-    case 'open-ex': openSheet(t.dataset.id, { dose: t.dataset.dose }); break;
+    case 'open-ex': {
+      const id = t.dataset.id;
+      const o = { dose: t.dataset.dose };
+      if (t.dataset.swap) {
+        o.alternatives = alternativesFor(id, state.profile, planCtx()).map((e) => ({ id: e.id, name: e.n }));
+        o.onSwap = (from, to) => {
+          const k = Object.keys(state.swaps).find((x) => state.swaps[x] === from);
+          if (k) state.swaps[k] = to; else state.swaps[from] = to;
+          save(); rerender(); toast('Esercizio sostituito nel tuo piano');
+        };
+        o.onExclude = (exId) => {
+          if (!state.excluded.includes(exId)) state.excluded.push(exId);
+          for (const k of Object.keys(state.swaps)) if (state.swaps[k] === exId) delete state.swaps[k];
+          save(); rerender(); toast('Escluso: il piano usa un’alternativa');
+        };
+      }
+      openSheet(id, o);
+      break;
+    }
+    case 'reset-choices':
+      if (confirm('Annullare tutte le sostituzioni, le esclusioni e gli adattamenti dei singoli esercizi?')) { state.swaps = {}; state.excluded = []; state.exAdj = {}; save(); rerender(); toast('Scelte ripristinate'); }
+      break;
     case 'play': startPlayer(t.dataset.iso); break;
     case 'toggle-item': {
       const lg = dayLog(t.dataset.iso);
