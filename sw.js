@@ -1,6 +1,6 @@
 // Service worker: rende l'app disponibile offline.
 // Cambia VERSION a ogni rilascio per aggiornare la cache.
-const VERSION = 'ritmo-v2';
+const VERSION = 'ritmo-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -15,6 +15,8 @@ const ASSETS = [
   './js/fx.js',
   './js/sheet.js',
   './js/player.js',
+  './js/assessment.js',
+  './js/assess-ui.js',
   './vendor/three.module.min.js',
   './fonts/space-grotesk.woff2',
   './fonts/jetbrains-mono-500.woff2',

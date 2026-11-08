@@ -8,6 +8,23 @@ PWA (installabile sul telefono, funziona offline) che crea un piano di allenamen
 - **obiettivo**: perdere peso, massa muscolare, tonificare, resistenza, mobilità, salute (con peso e data obiettivo facoltativi)
 - **tempo**: minuti al giorno (10–120) e giorni a settimana (2–7), attrezzi disponibili
 
+## Novità della versione 3: personalizzazione misurata
+
+- **Punto di partenza reale**: circonferenze (vita, collo, fianchi) → massa grassa (formula U.S. Navy), massa magra e rapporto vita/altezza; frequenza cardiaca a riposo e pressione; **mappa dei dolori** per 8 zone del corpo.
+- **Test fisici guidati in 3D** con strumenti integrati: piegamenti, alzate dalla sedia in 30 s (conto alla rovescia), plank e sospensione alla sbarra (cronometro), step test di 3 minuti (metronomo a 96 bpm + minuto di conteggio del polso), autovalutazione del fiato, flessibilità posteriore, mobilità di spalle e caviglia, squat profondo, equilibrio. I test non sicuri per la persona vengono saltati in automatico.
+- **Punteggi rispetto ai valori di riferimento** per età e sesso (ACSM, YMCA, Senior Fitness Test) e profilo a radar su 7 aree.
+- **Motore su misura**:
+  - livello separato per spinta, tirata, gambe, core e cardio;
+  - dosi calcolate sui test (es. piegamenti al 50–70% del massimo, plank al 55% della tenuta massima);
+  - esercizi correttivi nel riscaldamento e allungamenti mirati nel defaticamento in base ai limiti misurati (caviglie rigide → squat con talloni rialzati, femorali corti → ponte invece di stacco, spalle rigide → niente spinte sopra la testa…);
+  - più lavoro sui punti deboli;
+  - zone cardio con la formula di Karvonen e intervalli scelti in base al fiato;
+  - metabolismo con Katch-McArdle e proteine sulla massa magra;
+  - dolori: lieve → livello ridotto, medio → esercizi esclusi, forte → avviso medico.
+- **Il piano impara**: dopo ogni esercizio dell’allenamento guidato puoi dire facile / giusto / duro / dolore → progressione o regressione di quell’esercizio, oppure sostituzione. Dalla scheda di ogni esercizio puoi sostituirlo o escluderlo.
+- **Traguardi misurabili (KPI)** coerenti con l’obiettivo, con valore di partenza, traguardo e data (peso, vita, massa grassa, massa magra, test di forza, recupero cardiaco, mobilità…), verificati con il **test di controllo ogni 4 settimane**.
+- **Indice di precisione** del piano: quanto il piano si basa su dati misurati invece che su stime.
+
 ## Novità della versione 2
 
 - **Design "neon lab"**: tema scuro con accenti neon, sfondo animato, transizioni tra le schermate (View Transitions), anelli di progresso, numeri che contano, esplosione di particelle quando completi un allenamento.
@@ -69,6 +86,8 @@ js/app.js             interfaccia, navigazione, salvataggio
 js/engine.js          motore: piano, alimentazione, tempi, abitudini, adattamento
 js/exercises.js       database esercizi con controindicazioni
 js/guide.js           guida tecnica dettagliata di ogni esercizio
+js/assessment.js      test, punteggi, composizione corporea, KPI, indice di precisione
+js/assess-ui.js       valutazione guidata con cronometro, metronomo e 3D
 js/motions.js         pose chiave delle animazioni 3D
 js/viewer3d.js        manichino 3D, animazione, attrezzi, muscoli evidenziati
 js/player.js          allenamento guidato a schermo intero

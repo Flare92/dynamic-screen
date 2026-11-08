@@ -25,6 +25,15 @@ function ensureHost() {
   return host;
 }
 
+function swapSection() {
+  if (!current?.alts) return '';
+  return `
+    <p class="sub-h">Non ti piace o non puoi farlo?</p>
+    ${current.alts.length ? `<p class="small muted">Sostituiscilo nel tuo piano con:</p>
+    <div class="chips" style="margin-top:8px">${current.alts.slice(0, 8).map((a) => `<button data-sheet="swap" data-to="${a.id}">${esc(a.name)}</button>`).join('')}</div>` : '<p class="small muted">Non ci sono alternative adatte a te per questo schema motorio.</p>'}
+    <button class="btn danger wide" style="margin-top:12px" data-sheet="exclude">Mi dà fastidio: escludilo dal piano</button>`;
+}
+
 function tabContent(tab, g, ex, dose) {
   if (tab === 'come') {
     return `
@@ -53,7 +62,8 @@ function tabContent(tab, g, ex, dose) {
     </div>
     ${dose ? `<div class="alert ok" style="margin-top:12px"><span>◎</span><span><b>Oggi per te:</b> ${esc(dose)}</span></div>` : ''}
     <a class="btn ghost wide" style="margin-top:14px" href="https://www.youtube.com/results?search_query=${q}" target="_blank" rel="noopener">${ICON.video} Cerca video tutorial</a>
-    <p class="small muted" style="margin-top:8px;text-align:center">Apre YouTube: scegli video di fisioterapisti o preparatori qualificati.</p>`;
+    <p class="small muted" style="margin-top:8px;text-align:center">Apre YouTube: scegli video di fisioterapisti o preparatori qualificati.</p>
+    ${swapSection()}`;
 }
 
 let current = null;
@@ -64,7 +74,7 @@ export async function openSheet(id, opts = {}) {
   if (!ex || !g) return;
   ensureHost();
   lastFocus = document.activeElement;
-  current = { id, ex, g, dose: opts.dose, tab: 'come' };
+  current = { id, ex, g, dose: opts.dose, tab: 'come', alts: opts.alternatives || null, onSwap: opts.onSwap, onExclude: opts.onExclude };
   host.innerHTML = `
     <div class="scrim" data-sheet="close"></div>
     <div class="panel">
@@ -90,7 +100,7 @@ export async function openSheet(id, opts = {}) {
         <div class="tabs" role="tablist">
           <button class="on" data-sheet="tab" data-t="come">Come si fa</button>
           <button data-sheet="tab" data-t="errori">Errori</button>
-          <button data-sheet="tab" data-t="varianti">Varianti</button>
+          <button data-sheet="tab" data-t="varianti">${opts.alternatives ? 'Cambia' : 'Varianti'}</button>
         </div>
         <div id="sheet-tab">${tabContent('come', g, ex, opts.dose)}</div>
       </div>
@@ -131,6 +141,8 @@ function onClick(e) {
     host.querySelectorAll('[data-sheet=tab]').forEach((b) => b.classList.toggle('on', b === t));
     document.getElementById('sheet-tab').innerHTML = tabContent(current.tab, current.g, current.ex, current.dose);
   }
+  if (a === 'swap' && current) { const { id, onSwap } = current; closeSheet(); onSwap?.(id, t.dataset.to); return; }
+  if (a === 'exclude' && current) { const { id, onExclude } = current; closeSheet(); onExclude?.(id); return; }
   if (!viewer) return;
   if (a === 'view') { viewer.view(t.dataset.v); host.querySelectorAll('[data-sheet=view]').forEach((b) => b.classList.toggle('on', b === t)); }
   if (a === 'speed') { const slow = viewer.speed !== 0.5; viewer.setSpeed(slow ? 0.5 : 1); t.classList.toggle('on', slow); }

@@ -67,7 +67,7 @@ export function openPlayer(session, opts) {
     session, steps, keys, opts, host, idx: 0, left: 0, running: false, phase: 'idle',
     viewer: null, shownEx: null, tick: null, start: Date.now(), done: new Set(opts.doneKeys || []),
     voice: (() => { try { return localStorage.getItem('ritmo.voice') !== '0'; } catch { return true; } })(),
-    cueI: 0, cueT: 0, wake: null,
+    cueI: 0, cueT: 0, wake: null, fbDone: new Set(),
   };
   host.innerHTML = `
     <div class="p-top">
@@ -89,6 +89,7 @@ export function openPlayer(session, opts) {
       <div class="p-dose" id="p-dose"></div>
       <div class="set-dots" id="p-sets"></div>
       <p class="p-cue" id="p-cue"></p>
+      <div id="p-exfb"></div>
     </div>
     <div class="p-ctrl">
       <button class="round" data-p="prev" aria-label="Indietro">${ICON.prev}</button>
@@ -214,6 +215,14 @@ function paint(light = false) {
   $('p-dose').textContent = s.type === 'rest' ? '' : (s.reps ? `${s.reps} ripetizioni` : s.round ? '40 s di lavoro' : '');
   $('p-sets').innerHTML = s.type === 'work' && s.sets > 1 ? Array.from({ length: s.sets }, (_, i) => `<i class="${i < s.set ? 'on' : ''}"></i>`).join('') : '';
 
+  // feedback sull'esercizio appena concluso: adatta la difficoltà della prossima volta
+  const prev = P.steps[P.idx - 1];
+  const fbEl = $('p-exfb');
+  if (s.type === 'rest' && prev?.type === 'work' && prev.last && !P.fbDone.has(prev.id) && P.opts.onExFeedback) {
+    fbEl.innerHTML = `<p class="kicker" style="margin-top:6px">Com’era ${esc(prev.name.toLowerCase())}?</p>
+      <div class="exfb">${[['facile', 'Facile'], ['giusto', 'Giusto'], ['duro', 'Duro'], ['dolore', 'Dolore']].map(([k, l]) => `<button data-p="exfb" data-fb="${k}" data-id="${prev.id}">${l}</button>`).join('')}</div>`;
+  } else fbEl.innerHTML = '';
+
   if (P.viewer && P.shownEx !== work.id) {
     P.viewer.setMotion(work.id, g ? g.mm : []);
     P.shownEx = work.id;
@@ -285,6 +294,14 @@ function onClick(e) {
     let i = P.idx - 1;
     while (i > 0 && P.steps[i].type === 'rest') i--;
     enter(i);
+  }
+  if (a === 'exfb') {
+    P.fbDone.add(t.dataset.id);
+    P.opts.onExFeedback?.(t.dataset.id, t.dataset.fb);
+    haptic(15);
+    const msg = { facile: 'La prossima volta sarà più impegnativo', giusto: 'Perfetto, resta così', duro: 'La prossima volta sarà più leggero', dolore: 'Lo sostituisco dalla prossima sessione' }[t.dataset.fb];
+    document.getElementById('p-exfb').innerHTML = `<p class="small" style="color:var(--volt);margin-top:8px">✓ ${msg}</p>`;
+    return;
   }
   if (a === 'fb') {
     P.opts.onFinish?.(t.dataset.fb);
