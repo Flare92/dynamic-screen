@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Ritmo – la tua routine</title>
+  <meta name="description" content="Il tuo piano di allenamento personalizzato in base a corpo, salute, abitudini e tempo a disposizione.">
+  <meta name="theme-color" content="#F5F2EC" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121314" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Ritmo">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <main id="app" aria-live="polite"></main>
+
+  <nav id="tabbar" class="tabbar" hidden>
+    <a href="#/oggi" data-tab="oggi"><span class="ti">◉</span>Oggi</a>
+    <a href="#/piano" data-tab="piano"><span class="ti">▦</span>Piano</a>
+    <a href="#/progressi" data-tab="progressi"><span class="ti">↗</span>Progressi</a>
+    <a href="#/profilo" data-tab="profilo"><span class="ti">☰</span>Profilo</a>
+  </nav>
+
+  <div id="timer" class="timer" hidden>
+    <div class="timer-box">
+      <p class="eyebrow">Recupero</p>
+      <div class="timer-num" id="timer-num">60</div>
+      <div class="timer-actions">
+        <button class="btn ghost" data-action="timer-add" data-sec="-15">−15 s</button>
+        <button class="btn ghost" data-action="timer-add" data-sec="15">+15 s</button>
+      </div>
+      <button class="btn primary wide" data-action="timer-stop">Chiudi</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
