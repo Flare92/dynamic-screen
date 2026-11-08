@@ -12,6 +12,8 @@ import {
   MEASURES, PAIN_REGIONS, PAIN_LEVELS, AREAS, LEVEL_LABEL, TEST_BY_ID,
   computeProfile, precision, buildKpis, metric, kpiProgress,
 } from './assessment.js';
+import { QUESTIONS, EXAMPLE, DIETS, parseNarrative, coverage, analyzeWithClaude, mergeAI } from './narrative.js';
+import { DIET_LABEL } from './diet.js';
 import { startAssessment, renderAssessment, mountAssessment, handleAssessmentClick, assessmentActive, cancelAssessment } from './assess-ui.js';
 
 // ==================================================================
@@ -82,9 +84,10 @@ let heroTimer = null;
 
 function route() {
   const hash = location.hash.replace('#/', '') || 'oggi';
-  if (!state.profile && hash !== 'setup' && hash !== 'benvenuto') { location.replace('#/benvenuto'); }
-  const page = state.profile ? (hash === 'benvenuto' ? 'oggi' : hash) : (hash === 'setup' ? 'setup' : 'benvenuto');
-  const withTabs = !['setup', 'benvenuto', 'valutazione'].includes(page);
+  if (!state.profile && !['setup', 'benvenuto', 'racconto', 'capito'].includes(hash)) { location.replace('#/benvenuto'); }
+  if (hash === 'capito' && !draft) { location.replace('#/racconto'); return; }
+  const page = state.profile ? (hash === 'benvenuto' ? 'oggi' : hash) : (['setup', 'racconto', 'capito'].includes(hash) ? hash : 'benvenuto');
+  const withTabs = !['setup', 'benvenuto', 'valutazione', 'racconto', 'capito'].includes(page);
   if (page !== 'valutazione' && assessmentActive()) cancelAssessment();
   if (page === 'valutazione' && !assessmentActive()) beginAssessment();
   $tabbar.hidden = !withTabs;
@@ -93,10 +96,12 @@ function route() {
 
   if (page !== 'benvenuto') disposeHero();
   if (page === 'setup' && !draft) initDraft(!!state.profile);
-  const views = { benvenuto: viewWelcome, setup: viewWizard, oggi: viewToday, piano: viewPlan, esercizi: viewLibrary, progressi: viewProgress, profilo: viewProfile, valutazione: renderAssessment, partenza: viewStart };
+  const views = { benvenuto: viewWelcome, setup: viewWizard, oggi: viewToday, piano: viewPlan, esercizi: viewLibrary, progressi: viewProgress, profilo: viewProfile, valutazione: renderAssessment, partenza: viewStart, racconto: viewStory, capito: viewReview };
   $app.innerHTML = (views[page] || viewToday)();
   if (page === 'setup') bindWizardInputs();
   if (page === 'valutazione') mountAssessment();
+  if (page === 'racconto') bindStory();
+  if (page === 'capito') bindWizardInputs();
   if (page === 'benvenuto') mountHero();
   countUp($app);
 }
@@ -135,7 +140,8 @@ function viewWelcome() {
       <div><span class="fi">⏱️</span><b>Guidato</b><span>Timer, serie, recuperi e voce.</span></div>
       <div><span class="fi">📈</span><b>Si adatta</b><span>Corregge il piano con i tuoi progressi.</span></div>
     </div>
-    <button class="btn primary wide ${R(4)}" data-action="start-setup">Crea il mio piano · 2 min</button>
+    <button class="btn primary wide ${R(4)}" data-action="start-story">✍️ Raccontami di te</button>
+    <button class="btn ghost wide ${R(4)}" data-action="start-setup" style="margin-top:-10px">Preferisco rispondere a domande guidate</button>
     <p class="disclaimer ${R(5)}" style="margin-top:0">Dati salvati solo su questo dispositivo · Non sostituisce il parere medico</p>
   </section>`;
 }
@@ -155,6 +161,186 @@ async function mountHero() {
 function disposeHero() {
   clearInterval(heroTimer); heroTimer = null;
   heroViewer?.dispose(); heroViewer = null;
+}
+
+// ==================================================================
+// Relazione iniziale (testo libero)
+// ==================================================================
+
+const STORY_KEY = 'ritmo.story';
+const AI_KEY = 'ritmo.aikey';
+let storyResult = null;
+const storyText = () => { try { return localStorage.getItem(STORY_KEY) ?? state.profile?.relazione ?? ''; } catch { return state.profile?.relazione || ''; } };
+const storySave = (v) => { try { localStorage.setItem(STORY_KEY, v); } catch { /* */ } };
+function aiKey(v) {
+  try {
+    if (v === undefined) return localStorage.getItem(AI_KEY);
+    if (v === null) localStorage.removeItem(AI_KEY); else localStorage.setItem(AI_KEY, v);
+  } catch { return null; }
+  return v;
+}
+
+function viewStory() {
+  const text = storyText();
+  const cov = coverage(parseNarrative(text));
+  const hasKey = !!aiKey();
+  const canDictate = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  return `
+  <div class="wizard-top ${R(0)}">
+    <button class="icon-btn" onclick="history.back()" aria-label="Indietro">${ICON.prev}</button>
+    <div class="grow"></div><span class="chip cyan"><i></i>Relazione iniziale</span>
+  </div>
+  <section class="stack-lg">
+    <div class="${R(1)}"><h1>Raccontami di te</h1>
+      <p class="muted" style="margin-top:8px">Scrivi come parleresti a un personal trainer. Le domande qui sotto sono una traccia: si accendono quando le hai coperte.</p></div>
+    <div class="qchips ${R(2)}" id="qchips">${qchips(cov)}</div>
+    <div class="story-box ${R(3)}">
+      <textarea id="story" placeholder="Es. Ho 34 anni, mi alleno 2 volte a settimana in palestra per un’ora, vorrei aggiungere 20 minuti a casa 3-4 giorni a settimana. Lavoro seduto al pc…">${esc(text)}</textarea>
+      <div class="row between story-tools">
+        ${canDictate ? `<button type="button" class="btn ghost small" data-action="story-mic">🎙️ Detta</button>` : '<span class="small muted">Puoi usare la dettatura della tastiera 🎙️</span>'}
+        <span class="mono small muted" id="story-count">${wordCount(text)} parole</span>
+      </div>
+    </div>
+    <button class="link small ${R(4)}" data-action="story-example">Vedi un esempio di relazione</button>
+    <div class="card ${R(5)}">
+      <div class="row between"><b>Analisi avanzata con Claude</b>${hasKey ? '<span class="chip volt"><i></i>Attiva</span>' : '<span class="chip">Facoltativa</span>'}</div>
+      ${hasKey ? `<label class="row small" style="margin-top:10px"><input type="checkbox" id="use-ai" checked> Usa Claude per capire meglio il testo</label>
+        <p class="small muted" style="margin-top:6px">Il testo viene inviato ad Anthropic con la tua chiave. Senza connessione si usa l’analisi integrata.</p>`
+        : `<p class="small muted" style="margin-top:6px">L’analisi integrata funziona offline e riconosce le frasi più comuni. Con una tua chiave API di Anthropic Claude capisce qualsiasi modo di scrivere. La chiave resta solo su questo telefono.</p>
+        <div class="row" style="margin-top:10px"><input type="password" id="ai-key" placeholder="sk-ant-…" autocomplete="off"><button type="button" class="btn ghost small" data-action="ai-save">Salva</button></div>`}
+    </div>
+    <div class="wizard-actions"><button class="btn primary" data-action="story-analyze">Analizza la mia relazione</button></div>
+  </section>`;
+}
+const wordCount = (t) => (t.trim() ? t.trim().split(/\s+/).length : 0);
+const qchips = (cov) => cov.map((q) => `<span class="qchip ${q.ok ? 'ok' : ''}"><i>${q.ok ? '✓' : '○'}</i><span><b>${q.label}</b><small>${q.hint}</small></span></span>`).join('');
+
+let storyTimer = null;
+function updateStoryCoverage() {
+  const el = document.getElementById('story');
+  if (!el) return;
+  document.getElementById('qchips').innerHTML = qchips(coverage(parseNarrative(el.value)));
+  document.getElementById('story-count').textContent = `${wordCount(el.value)} parole`;
+}
+function bindStory() {
+  const el = document.getElementById('story');
+  el.addEventListener('input', () => { storySave(el.value); clearTimeout(storyTimer); storyTimer = setTimeout(updateStoryCoverage, 250); });
+}
+
+let recog = null;
+function toggleDictation(btn) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return;
+  if (recog) { recog.stop(); recog = null; btn.textContent = '🎙️ Detta'; return; }
+  recog = new SR();
+  recog.lang = 'it-IT'; recog.continuous = true; recog.interimResults = false;
+  const el = document.getElementById('story');
+  recog.onresult = (ev) => {
+    for (let i = ev.resultIndex; i < ev.results.length; i++) if (ev.results[i].isFinal) el.value = `${el.value.trim()} ${ev.results[i][0].transcript.trim()}.`.trim();
+    storySave(el.value); updateStoryCoverage();
+  };
+  recog.onend = () => { if (recog) { recog = null; btn.textContent = '🎙️ Detta'; } };
+  recog.onerror = () => { toast('Dettatura non disponibile'); };
+  recog.start();
+  btn.textContent = '⏹ Stop';
+}
+
+async function analyzeStory(btn) {
+  const text = document.getElementById('story').value.trim();
+  if (wordCount(text) < 8) { toast('Scrivi qualche frase in più su di te'); return; }
+  storySave(text);
+  let result = parseNarrative(text);
+  const useAI = document.getElementById('use-ai')?.checked && aiKey();
+  if (useAI) {
+    btn.disabled = true; btn.textContent = 'Claude sta leggendo…';
+    try { result = mergeAI(result, await analyzeWithClaude(text, aiKey())); }
+    catch (e) { toast(`Analisi avanzata non riuscita: uso quella integrata (${e?.status === 401 ? 'chiave non valida' : 'errore di rete'})`); }
+    btn.disabled = false; btn.textContent = 'Analizza la mia relazione';
+  }
+  storyResult = result;
+  draftFromStory(result, text);
+  location.hash = '#/capito';
+}
+
+const DEFAULTS = { fumo: 'no', alcol: 'occasionale', stress: 'medio', sonno: 7, alimentazione: 'media', esperienza: 'principiante', lavoro: 'sedentario', passi: '5000-7500', dieta: 'onnivora' };
+function draftFromStory(r, text) {
+  const old = state.profile || {};
+  const base = { nome: '', condizioni: [], attrezzi: [], misure: {}, dolori: {}, note: '', traguardo: '', pesoObiettivo: '', dataObiettivo: '' };
+  draft = { ...base, ...old, ...r.profile, relazione: text };
+  draft.assumed = [];
+  for (const [k, v] of Object.entries(DEFAULTS)) if (r.profile[k] === undefined && old[k] === undefined) { draft[k] = v; draft.assumed.push(k); }
+  draft.sessioni = r.sessioni?.length ? r.sessioni.map((x) => ({ giorni: x.giorni, minuti: x.minuti, luogo: x.luogo })) : (old.sessioni || [{ giorni: 3, minuti: 30, luogo: 'casa' }]);
+  draft.misure = { ...(old.misure || {}), ...(r.profile.misure || {}) };
+  draft._edit = !!state.profile;
+  wizardStep = STEPS.length - 1;
+}
+function reviewError() {
+  const d = draft;
+  if (!d.sesso) return 'Indica il sesso.';
+  if (!(d.eta >= 14 && d.eta <= 100)) return 'Inserisci la tua età.';
+  if (!(d.altezza >= 120 && d.altezza <= 230)) return 'Inserisci la tua altezza in cm.';
+  if (!(d.peso >= 30 && d.peso <= 300)) return 'Inserisci il tuo peso in kg.';
+  if (!d.obiettivo) return 'Scegli il tuo obiettivo principale.';
+  return slotError(d);
+}
+
+function viewReview() {
+  const d = draft;
+  const r = storyResult || { found: {}, evidence: {} };
+  const ok = (k) => (r.found[k] ? '<span class="found">✓ dal testo</span>' : '<span class="missing">da completare</span>');
+  const as = (k) => (d.assumed?.includes(k) ? '<span class="assumed">ipotesi</span>' : '<span class="found">✓</span>');
+  const pains = Object.entries(d.dolori || {}).filter(([, v]) => v > 0);
+  return `
+  <div class="wizard-top ${R(0)}">
+    <button class="icon-btn" onclick="location.hash='#/racconto'" aria-label="Indietro">${ICON.prev}</button>
+    <div class="grow"></div><span class="chip volt"><i></i>${r.ai ? 'Analizzato con Claude' : 'Analisi integrata'}</span>
+  </div>
+  <form id="wizard" class="stack-lg" onsubmit="return false">
+    <div class="${R(1)}"><h1>Ecco cosa ho capito</h1><p class="muted" style="margin-top:8px">Controlla, completa quello che manca e genera il piano.</p></div>
+    ${r.sintesi ? `<div class="card glow ${R(2)}"><p>${esc(r.sintesi)}</p>${r.noteCoach?.length ? `<ul class="coach-notes">${r.noteCoach.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}</div>` : ''}
+
+    <section class="card ${R(2)}"><div class="row between"><h3>Chi sei</h3></div>
+      <div class="field" style="margin-top:12px"><span>Sesso ${ok('sesso')}</span>${seg('sesso', [['F', 'Donna'], ['M', 'Uomo']], d.sesso)}</div>
+      <div class="grid-3" style="margin-top:12px">
+        ${num('eta', `Età`, d.eta, 'min="14" max="100"')}${num('altezza', 'Altezza cm', d.altezza, 'min="120" max="230"')}${num('peso', 'Peso kg', d.peso, 'min="30" max="300" step="0.1"')}
+      </div>
+    </section>
+
+    <section class="card ${R(3)}"><div class="row between"><h3>Obiettivo</h3>${ok('obiettivo')}</div>
+      <div class="seg" data-name="obiettivo" style="margin-top:12px">${GOALS.map((g) => `<button type="button" data-value="${g.id}" class="${d.obiettivo === g.id ? 'on' : ''}">${g.icon} ${g.label}</button>`).join('')}</div>
+      <div class="grid-2" style="margin-top:12px">${num('pesoObiettivo', 'Peso obiettivo', d.pesoObiettivo, 'step="0.5" placeholder="kg"')}
+        <label class="field"><span>Entro</span><input type="date" name="dataObiettivo" value="${esc(d.dataObiettivo || '')}"></label></div>
+    </section>
+
+    <section class="card ${R(4)}"><div class="row between"><h3>La tua settimana</h3>${ok('sessioni')}</div>
+      <div style="margin-top:12px">${slotEditor(d)}</div>
+      <div class="field" style="margin-top:12px"><span>Attrezzi a casa</span>${chips('attrezzi', EQUIPMENT.filter((e) => e.id !== 'palestra'), d.attrezzi)}</div>
+    </section>
+
+    <section class="card ${R(5)}"><div class="row between"><h3>Alimentazione</h3>${ok('dieta')}</div>
+      <div style="margin-top:12px">${seg('dieta', DIETS.map((x) => [x.id, x.label]), d.dieta)}</div>
+    </section>
+
+    <section class="card ${R(6)}"><div class="row between"><h3>Salute</h3>${ok('salute')}</div>
+      <p class="small muted" style="margin-top:8px">${pains.length ? 'Dolori riconosciuti: ' + pains.map(([k, v]) => `${PAIN_REGIONS.find((x) => x.id === k)?.label.toLowerCase()} (${['', 'lieve', 'medio', 'forte'][v]})`).join(', ') : 'Nessun dolore indicato.'}${d.condizioni?.length ? ' · Condizioni: ' + d.condizioni.map((c) => CONDITIONS.find((x) => x.id === c)?.label).filter(Boolean).join(', ') : ''}</p>
+      <div class="pain-list" style="margin-top:10px">${PAIN_REGIONS.map((x) => `<div class="pain-row"><span>${x.label}</span>${seg('dol_' + x.id, PAIN_LEVELS, d.dolori?.[x.id] ?? 0)}</div>`).join('')}</div>
+      <div class="field" style="margin-top:12px"><span>Condizioni</span>${chips('condizioni', CONDITIONS, d.condizioni)}</div>
+    </section>
+
+    <section class="card ${R(7)}"><h3>Giornata e abitudini</h3>
+      <div class="field" style="margin-top:12px"><span>Lavoro ${as('lavoro')}</span>${seg('lavoro', [['sedentario', 'Seduto'], ['in_piedi', 'In piedi'], ['fisico', 'Fisico']], d.lavoro)}</div>
+      <div class="field" style="margin-top:12px"><span>Passi al giorno ${as('passi')}</span>${seg('passi', [['<3000', '< 3k'], ['3000-5000', '3–5k'], ['5000-7500', '5–7,5k'], ['7500-10000', '7,5–10k'], ['>10000', '> 10k']], d.passi)}</div>
+      <div class="field" style="margin-top:12px"><span>Ore di sonno ${as('sonno')}</span>${seg('sonno', [[5, '≤ 5'], [6, '6'], [7, '7'], [8, '8'], [9, '9+']], d.sonno)}</div>
+      <div class="field" style="margin-top:12px"><span>Esperienza ${as('esperienza')}</span>${seg('esperienza', [['principiante', 'Principiante'], ['intermedio', 'Intermedio'], ['avanzato', 'Avanzato']], d.esperienza)}</div>
+      <div class="grid-2" style="margin-top:12px">
+        <div class="field"><span>Fumo ${as('fumo')}</span>${seg('fumo', [['no', 'No'], ['si', 'Sì']], d.fumo)}</div>
+        <div class="field"><span>Stress ${as('stress')}</span>${seg('stress', [['basso', 'Basso'], ['medio', 'Medio'], ['alto', 'Alto']], d.stress)}</div>
+      </div>
+    </section>
+    <p class="error" id="wiz-error" hidden></p>
+    <div class="wizard-actions"><button type="button" class="btn primary" data-action="story-generate">Genera il mio piano</button></div>
+    <button type="button" class="link small" data-action="story-edit-all" style="display:block;margin:0 auto">Rivedi tutto passo per passo</button>
+  </form>`;
 }
 
 // ==================================================================
@@ -221,7 +407,8 @@ const STEPS = [
         <div class="field"><span>Fumi?</span>${seg('fumo', [['no', 'No'], ['si', 'Sì']], d.fumo)}</div>
         <div class="field"><span>Alcol</span>${seg('alcol', [['mai', 'Mai'], ['occasionale', 'A volte'], ['spesso', 'Spesso']], d.alcol)}</div>
       </div>
-      <div class="field"><span>Stress</span>${seg('stress', [['basso', 'Basso'], ['medio', 'Medio'], ['alto', 'Alto']], d.stress)}</div>`,
+      <div class="field"><span>Stress</span>${seg('stress', [['basso', 'Basso'], ['medio', 'Medio'], ['alto', 'Alto']], d.stress)}</div>
+      <div class="field"><span>Tipo di alimentazione</span>${seg('dieta', DIETS.map((x) => [x.id, x.label]), d.dieta || 'onnivora')}</div>`,
     validate: (d) => {
       for (const [k, l] of [['lavoro', 'il lavoro'], ['passi', 'i passi'], ['sonno', 'le ore di sonno'], ['esperienza', 'l’esperienza'], ['alimentazione', 'l’alimentazione'], ['fumo', 'il fumo'], ['alcol', 'l’alcol'], ['stress', 'lo stress']]) if (d[k] === undefined || d[k] === '') return `Indica ${l}.`;
       return null;
@@ -241,16 +428,10 @@ const STEPS = [
   {
     title: 'Il tuo tempo', sub: 'Meglio poco ma costante: scegli un impegno che riesci davvero a mantenere.',
     render: (d) => `
-      <div class="card glow">
-        <span class="kicker">Minuti al giorno</span>
-        <div class="slider-out"><span id="min-out">${d.minuti}</span><small>MIN</small></div>
-        <input type="range" name="minuti" min="10" max="120" step="5" value="${d.minuti}" aria-label="Minuti al giorno">
-        <p class="small muted" id="min-hint">${minutesHint(d.minuti)}</p>
-      </div>
-      <div class="field"><span>Giorni a settimana</span>${seg('giorni', [[2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6'], [7, '7']], d.giorni)}</div>
-      <p class="small muted" id="week-total">${weekTotalText(d)}</p>
-      <div class="field"><span>Cosa hai a disposizione?</span>${chips('attrezzi', EQUIPMENT, d.attrezzi)}<small>Il corpo libero è sempre incluso.</small></div>`,
-    validate: (d) => (!d.giorni ? 'Scegli quanti giorni a settimana.' : null),
+      <p class="small muted">Puoi combinare sessioni diverse: per esempio 2 da un’ora in palestra e 4 da 20 minuti a casa.</p>
+      ${slotEditor(d)}
+      <div class="field"><span>Attrezzi che hai a casa</span>${chips('attrezzi', EQUIPMENT.filter((e) => e.id !== 'palestra'), d.attrezzi)}<small>Il corpo libero è sempre incluso. In palestra trovi già tutto.</small></div>`,
+    validate: (d) => slotError(d),
   },
 ];
 
@@ -260,7 +441,24 @@ function minutesHint(m) {
   if (m <= 60) return 'Sessioni complete: riscaldamento, lavoro e defaticamento.';
   return 'Tanto tempo: più volume. Ricordati di recuperare.';
 }
-const weekTotalText = (d) => `Totale: ${d.minuti * (d.giorni || 0)} minuti a settimana${d.minuti * d.giorni < 150 ? ' · le camminate completeranno il resto' : ''}.`;
+const slotTot = (d) => (d.sessioni || []).reduce((a, x) => ({ g: a.g + (x.giorni || 0), m: a.m + (x.giorni || 0) * x.minuti }), { g: 0, m: 0 });
+const weekTotalText = (d) => { const t = slotTot(d); return `Totale: ${t.g} allenamenti e ${t.m} minuti a settimana${t.m < 150 ? ' · le camminate completeranno il resto' : ''}.`; };
+const slotError = (d) => { const t = slotTot(d); return !t.g ? 'Indica almeno una sessione a settimana.' : t.g > 7 ? `In totale hai ${t.g} giorni: al massimo 7 a settimana.` : null; };
+const LUOGHI = [['palestra', 'Palestra'], ['casa', 'Casa'], ['aperto', 'All’aperto']];
+function slotEditor(d) {
+  const S = d.sessioni || [];
+  return `<div class="slots">${S.map((x, i) => `
+    <div class="slot card flat">
+      <div class="row between"><span class="kicker">Sessione ${S.length > 1 ? i + 1 : ''}</span>${S.length > 1 ? `<button type="button" class="link small" data-action="slot-del" data-i="${i}">Rimuovi</button>` : ''}</div>
+      <div class="seg" data-slot="${i}" data-field="luogo">${LUOGHI.map(([v, l]) => `<button type="button" data-value="${v}" class="${x.luogo === v ? 'on' : ''}">${l}</button>`).join('')}</div>
+      <p class="small muted" style="margin-top:12px">Giorni a settimana</p>
+      <div class="seg seg-days" data-slot="${i}" data-field="giorni">${[1, 2, 3, 4, 5, 6, 7].map((v) => `<button type="button" data-value="${v}" class="${x.giorni === v ? 'on' : ''}">${v}</button>`).join('')}</div>
+      <div class="row between" style="margin-top:12px"><span class="small muted">Durata di ogni sessione</span><b class="mono" id="slotmin-${i}">${x.minuti} min</b></div>
+      <input type="range" min="10" max="120" step="5" name="slotmin_${i}" value="${x.minuti}" aria-label="Durata">
+    </div>`).join('')}</div>
+    ${S.length < 3 ? '<button type="button" class="btn ghost wide" data-action="slot-add">+ Aggiungi un altro tipo di sessione</button>' : ''}
+    <p class="small muted" id="week-total">${weekTotalText(d)}</p>`;
+}
 
 function viewWizard() {
   const step = STEPS[wizardStep];
@@ -284,6 +482,13 @@ function bindWizardInputs() {
   document.getElementById('wizard').addEventListener('input', (e) => {
     const el = e.target;
     if (!el.name) return;
+    if (el.name.startsWith('slotmin_')) {
+      const i = Number(el.name.slice(8));
+      draft.sessioni[i].minuti = Number(el.value);
+      const lab = document.getElementById(`slotmin-${i}`); if (lab) lab.textContent = `${el.value} min`;
+      updateWeekTotal();
+      return;
+    }
     if (el.name.startsWith('mis_')) {
       draft.misure = draft.misure || {};
       const k = el.name.slice(4);
@@ -307,6 +512,7 @@ function initDraft(edit) {
   draft = edit && state.profile ? structuredClone(state.profile) : {
     nome: '', condizioni: [], attrezzi: [], misure: {}, dolori: {}, minuti: 30, giorni: 3, sonno: '', note: '', traguardo: '', pesoObiettivo: '', dataObiettivo: '',
   };
+  if (!draft.sessioni?.length) draft.sessioni = [{ giorni: draft.giorni || 3, minuti: draft.minuti || 30, luogo: (draft.attrezzi || []).includes('palestra') ? 'palestra' : 'casa' }];
   draft._edit = edit;
   wizardStep = 0;
 }
@@ -320,6 +526,14 @@ function finishWizard() {
   const p = { ...draft };
   const wasEdit = p._edit;
   delete p._edit;
+  p.sessioni = (p.sessioni || []).filter((x) => x.giorni > 0);
+  const tot = slotTot(p);
+  p.giorni = Math.min(7, tot.g);
+  p.minuti = Math.round(tot.m / Math.max(1, tot.g));
+  p.attrezzi = [...new Set([...(p.attrezzi || []).filter((a) => a !== 'palestra'), ...(p.sessioni.some((x) => x.luogo === 'palestra') ? ['palestra'] : [])])];
+  p.dieta = p.dieta || 'onnivora';
+  delete p.assumed;
+  storyResult = null;
   p.pesoObiettivo = p.pesoObiettivo === '' ? null : p.pesoObiettivo;
   p.dataObiettivo = p.dataObiettivo || null;
   const old = state.profile;
@@ -460,7 +674,7 @@ function sessionCard(s, iso, lg, moved) {
     <div class="session-hero">
       ${ring(pct, lg.done ? '✓' : `${Math.round(pct * 100)}<span style="font-size:12px">%</span>`, lg.done ? 'FATTO' : `${doneItems.size}/${total}`)}
       <div>
-        <div class="meta" style="margin-top:0"><span class="chip ${kindChip}">${kindLabel}</span><span class="chip">${s.minutes} min</span></div>
+        <div class="meta" style="margin-top:0"><span class="chip ${kindChip}">${kindLabel}</span><span class="chip">${s.minutes} min</span>${s.luogo ? `<span class="chip">${LUOGO_LABEL[s.luogo]}</span>` : ''}</div>
         <h2 style="margin-top:10px">${esc(s.title)}</h2>
         ${moved ? '<p class="small muted" style="margin-top:4px">Allenamento spostato a oggi</p>' : ''}
       </div>
@@ -529,6 +743,7 @@ function habitsCard(plan, iso) {
 // Piano
 // ==================================================================
 
+const LUOGO_LABEL = { palestra: 'Palestra', casa: 'Casa', aperto: 'All’aperto' };
 const BLOCK_LABELS = { impatto: 'salti e corsa', supino: 'esercizi sdraiati sulla schiena', prono: 'esercizi a pancia in giù', valsalva: 'carichi massimali', testaGiu: 'posizioni a testa in giù', flessioneCarico: 'flessioni del busto sotto carico' };
 
 function viewPlan() {
@@ -565,11 +780,14 @@ function viewPlan() {
     ${plan.alerts.map((a, i) => `<div class="alert ${a.level} ${R(2 + i)}"><span>${a.level === 'stop' ? '⚠︎' : 'ℹ︎'}</span><span>${esc(a.text)}</span></div>`).join('')}
   </div>
 
+  ${plan.summary?.length ? `<div class="section-title"><h2>Il tuo piano in breve</h2></div>
+  <section class="card">${plan.summary.map((f) => `<div class="tip"><span class="ti">${f.icon}</span><div><b>${esc(f.title)}</b><p class="small muted" style="margin-top:2px">${esc(f.text)}</p></div></div>`).join('')}</section>` : ''}
+
   <div class="section-title"><h2>La settimana</h2><span class="chip cyan">${plan.phase.label}</span></div>
   <p class="small muted" style="margin:0 2px 12px">${esc(plan.phase.note)}</p>
   ${plan.schedule.map((d, i) => d.session ? `
     <details class="day ${R(i)}">
-      <summary><span class="day-label">${d.label}</span><span class="grow"><b>${esc(d.session.title)}</b><br><span class="small muted">${d.session.minutes} min · ${d.session.blocks.reduce((a, b) => a + b.items.length, 0)} esercizi</span></span></summary>
+      <summary><span class="day-label">${d.label}</span><span class="grow"><b>${esc(d.session.title)}</b><br><span class="small muted">${d.session.minutes} min · ${d.session.blocks.reduce((a, b) => a + b.items.length, 0)} esercizi${d.session.luogo ? ' · ' + LUOGO_LABEL[d.session.luogo] : ''}</span></span></summary>
       <div class="day-body">${d.session.blocks.map((b) => `
         <div class="block"><div class="block-head"><h3>${b.name}</h3><span class="mono small muted">${b.minutes}′</span></div>
         ${b.note ? `<p class="block-note">${esc(b.note)}</p>` : ''}
@@ -597,6 +815,15 @@ function viewPlan() {
     </div>
     ${n.notes.map((x) => `<div class="alert info" style="margin-top:10px"><span>💡</span><span>${esc(x)}</span></div>`).join('')}
   </section>
+
+  <div class="section-title"><h2>Giornata tipo</h2><span class="chip">${DIET_LABEL[n.dieta] || 'Onnivora'}</span></div>
+  <section class="card">
+    ${n.meals.meals.map((m) => `<div class="meal"><div class="row between"><b>${m.label}</b><span class="mono small" style="color:var(--volt)">${m.protein} g prot.</span></div>
+      <ul>${m.items.map((i) => `<li><span>${esc(i.name)}</span><span class="mono small muted">${i.grams} g</span></li>`).join('')}</ul></div>`).join('')}
+    <p class="small muted" style="margin-top:10px">Porzioni calcolate per arrivare a ~${n.meals.total} g di proteine. Carboidrati e condimenti (olio extravergine) da regolare sulle calorie del giorno.</p>
+  </section>
+  ${n.dietTips.length ? `<section class="card" style="margin-top:12px">${n.dietTips.map((t) => `<div class="tip"><span class="ti">${t.icon}</span><div><b>${esc(t.title)}</b><p class="small muted" style="margin-top:2px">${esc(t.text)}</p></div></div>`).join('')}
+    <p class="small muted" style="margin-top:6px">Indicazioni generali: per integratori e dosi confrontati con il medico.</p></section>` : ''}
 
   <div class="section-title"><h2>Abitudini</h2></div>
   <section class="card">
@@ -975,6 +1202,15 @@ function viewProfile() {
         : '<p class="muted small">Dal menu del browser scegli <b>Installa app</b> o <b>Aggiungi a schermata Home</b>.</p>'}
   </section>` : ''}
 
+  <div class="section-title"><h2>La tua relazione</h2></div>
+  <section class="card">
+    ${p.relazione ? `<p class="small muted story-quote">“${esc(p.relazione.length > 280 ? p.relazione.slice(0, 280) + '…' : p.relazione)}”</p>` : '<p class="small muted">Racconta la tua situazione con parole tue: il piano verrà ricalcolato.</p>'}
+    <a class="btn ghost wide" style="margin-top:12px" href="#/racconto">${p.relazione ? 'Aggiorna la relazione' : 'Scrivi la tua relazione'}</a>
+    <div class="row between" style="margin-top:16px"><b class="small">Analisi avanzata con Claude</b>${aiKey() ? '<button class="link small" data-action="ai-remove">Rimuovi chiave</button>' : '<span class="small muted">non attiva</span>'}</div>
+    ${aiKey() ? '' : '<div class="row" style="margin-top:8px"><input type="password" id="ai-key" placeholder="Chiave API sk-ant-…" autocomplete="off"><button class="btn ghost small" data-action="ai-save">Salva</button></div>'}
+    <p class="small muted" style="margin-top:6px">La chiave resta su questo dispositivo e non finisce nei backup. L’analisi usa il tuo account Anthropic.</p>
+  </section>
+
   <div class="section-title"><h2>I tuoi dati</h2></div>
   <section class="card stack ${R(3)}">
     <p class="small muted">Tutto è salvato solo su questo dispositivo. Esporta un backup per non perderlo o per spostarlo su un altro telefono.</p>
@@ -1057,6 +1293,14 @@ document.addEventListener('click', (e) => {
   const t = e.target.closest('[data-action], .seg button, .chips[data-multi] button, .goal-grid button');
   if (!t || t.closest('#player') || t.closest('.sheet')) return;
 
+  const slotSeg = t.parentElement?.closest('.seg[data-slot]');
+  if (slotSeg && draft && !t.dataset.action) {
+    const i = Number(slotSeg.dataset.slot), f = slotSeg.dataset.field;
+    draft.sessioni[i][f] = f === 'giorni' ? Number(t.dataset.value) : t.dataset.value;
+    slotSeg.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === t));
+    updateWeekTotal(); haptic(8);
+    return;
+  }
   const segEl = t.parentElement?.closest('.seg[data-name], .goal-grid[data-name]');
   if (segEl && draft && !t.dataset.action) {
     const name = segEl.dataset.name;
@@ -1081,6 +1325,27 @@ document.addEventListener('click', (e) => {
   const a = t.dataset.action;
   switch (a) {
     case 'start-setup': startWizard(false); break;
+    case 'start-story': location.hash = '#/racconto'; break;
+    case 'slot-add': draft.sessioni.push({ giorni: 3, minuti: 20, luogo: 'casa' }); rerender(); break;
+    case 'slot-del': draft.sessioni.splice(Number(t.dataset.i), 1); rerender(); break;
+    case 'story-example': { const el = document.getElementById('story'); el.value = EXAMPLE; storySave(EXAMPLE); updateStoryCoverage(); break; }
+    case 'story-mic': toggleDictation(t); break;
+    case 'story-analyze': analyzeStory(t); break;
+    case 'story-edit-all': { wizardStep = 0; draft._edit = !!state.profile; location.hash = '#/setup'; break; }
+    case 'story-generate': {
+      const err = reviewError();
+      const box = document.getElementById('wiz-error');
+      if (err) { box.textContent = err; box.hidden = false; box.scrollIntoView({ block: 'center' }); haptic([10, 30, 10]); return; }
+      finishWizard();
+      break;
+    }
+    case 'ai-save': {
+      const v = document.getElementById('ai-key').value.trim();
+      if (!/^sk-ant-/.test(v)) { toast('La chiave deve iniziare con sk-ant-'); return; }
+      aiKey(v); toast('Chiave salvata su questo dispositivo'); rerender();
+      break;
+    }
+    case 'ai-remove': aiKey(null); toast('Chiave rimossa'); rerender(); break;
     case 'edit-profile': startWizard(true); break;
     case 'wiz-back':
       if (wizardStep > 0) { wizardStep--; route(); window.scrollTo(0, 0); }
