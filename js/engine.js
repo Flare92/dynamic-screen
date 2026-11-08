@@ -4,6 +4,7 @@
 
 import { EXERCISES, BY_ID } from './exercises.js';
 import { computeProfile, PAIN_REGIONS, LEVEL_LABEL, AREAS } from './assessment.js';
+import { PROTEIN_FACTOR, DIET_LABEL, mealPlan, dietNotes } from './diet.js';
 
 // ------------------------------------------------------------------
 // Opzioni usate dall'interfaccia
@@ -80,6 +81,8 @@ export const weekdayIndex = (d) => (d.getDay() + 6) % 7; // lun = 0
 // Dati derivati dal profilo
 // ------------------------------------------------------------------
 
+// esercizi pensati per casa: in palestra si preferiscono le alternative con attrezzi
+const HOME_ONLY = ['r_tavolo', 'r_towel', 's_sitstand', 'p_muro', 'p_rialzo', 'p_dip'];
 // esercizi che caricano i polsi (appoggio sulle mani)
 const HAND_LOADED = ['p_muro', 'p_rialzo', 'p_ginocchia', 'p_classici', 'p_dip', 'v_pike', 'c_birddog', 'g_kick', 'w_gatto', 'm_gatto', 'r_tavolo'];
 const NECK_LOADED = ['c_crunch', 'c_hollow', 'v_pike', 'h_superman'];
@@ -186,7 +189,7 @@ export function allowedExercises(p, ctx = {}) {
 function pickPattern(pat, d, variant, used, preferLoad) {
   const list = EXERCISES.filter((e) => e.cat === 'strength' && e.pat === pat && allowed(e, d) && !used.has(e.id));
   if (!list.length) return null;
-  const score = (e) => e.lvl * 2 + (e.eq.includes('corpo') ? 0 : preferLoad ? 1.5 : 0.5) + (d.prefer?.[e.id] || 0);
+  const score = (e) => e.lvl * 2 + (e.eq.includes('corpo') ? 0 : preferLoad ? 1.5 : 0.5) + (d.prefer?.[e.id] || 0) - (d.equip.has('palestra') && HOME_ONLY.includes(e.id) ? 4 : 0);
   list.sort((a, b) => score(b) - score(a));
   const top = list.slice(0, Math.min(3, list.length));
   let e = top[variant % top.length];
@@ -341,18 +344,31 @@ const PATTERNS = {
   push: ['push_h', 'push_v', 'push_h', 'core', 'push_v'],
   pull: ['pull_v', 'pull_h', 'hinge', 'core', 'pull_h'],
   legs: ['squat', 'hinge', 'lunge', 'calf', 'glutei', 'core'],
+  core: ['core', 'core', 'glutei', 'core', 'core', 'hinge'],
+  focus: ['push_h', 'pull_h', 'squat', 'core', 'lunge', 'pull_v'],
 };
+
+// sessione "focus": gli schemi dei punti deboli misurati
+function focusPatterns(d, variant) {
+  const w = d.weakAreas || [];
+  const map = { forzaSup: ['push_h', 'pull_h', 'push_v', 'pull_v'], forzaInf: ['squat', 'lunge', 'glutei', 'hinge'], core: ['core', 'core', 'glutei'], equilibrio: ['lunge', 'glutei', 'core'], mobilita: ['glutei', 'core', 'hinge'] };
+  const pats = w.flatMap((a) => map[a] || []);
+  if (pats.length >= 3) return [...pats, 'core'];
+  return variant % 2 ? ['squat', 'lunge', 'glutei', 'core', 'hinge'] : ['push_h', 'pull_h', 'push_v', 'core', 'pull_v'];
+}
 
 const TITLES = {
   full: 'Forza total body', upper: 'Forza parte alta', lower: 'Forza parte bassa',
   push: 'Forza: spinta', pull: 'Forza: tirata', legs: 'Forza: gambe',
   circuito: 'Circuito metabolico', cardio: 'Cardio aerobico', intervalli: 'Intervalli',
   lungo: 'Cardio lungo', mobilita: 'Mobilità e allungamento',
+  postura: 'Postura e anti-sedentarietà', core: 'Core e stabilità', focus: 'Focus punti deboli',
 };
 
 export const TYPE_KIND = {
   full: 'forza', upper: 'forza', lower: 'forza', push: 'forza', pull: 'forza', legs: 'forza',
   circuito: 'forza', cardio: 'cardio', intervalli: 'cardio', lungo: 'cardio', mobilita: 'mobilita',
+  postura: 'mobilita', core: 'forza', focus: 'forza',
 };
 
 // ------------------------------------------------------------------
@@ -449,11 +465,11 @@ function strengthSession(type, minutes, p, d, variant, phase) {
   const { warm, cool } = splitTime(minutes);
   let main = minutes - warm - cool;
   let finisher = 0;
-  if ((goal === 'dimagrire' || goal === 'tonificare') && main >= 35 && type !== 'circuito') { finisher = 8; main -= finisher; }
+  if ((goal === 'dimagrire' || goal === 'tonificare') && main >= 35 && !['circuito', 'core', 'focus'].includes(type)) { finisher = 8; main -= finisher; }
 
   const circuit = type === 'circuito' || minutes < 25;
   const preferLoad = goal === 'massa' || goal === 'tonificare';
-  let patterns = [...PATTERNS[type === 'circuito' ? 'full' : type]];
+  let patterns = type === 'focus' ? focusPatterns(d, variant) : [...PATTERNS[type === 'circuito' ? 'full' : type]];
   const weak = d.weakAreas || [];
   if (['full', 'circuito'].includes(type)) {
     if (weak.includes('forzaSup')) patterns = ['push_h', 'pull_h', ...patterns.filter((x) => x !== 'push_h' && x !== 'pull_h')];
@@ -519,7 +535,8 @@ function strengthSession(type, minutes, p, d, variant, phase) {
   if (cb) blocks.push(cb);
 
   const letter = String.fromCharCode(65 + (variant % 3));
-  return { type, kind: 'forza', title: `${TITLES[type]}${['full', 'upper', 'lower', 'circuito'].includes(type) ? ' ' + letter : ''}`, minutes, blocks };
+  const title = type === 'focus' && weak.length ? `Focus: ${weak.map((w) => AREAS.find((a) => a.id === w)?.short.toLowerCase()).join(' e ')}` : `${TITLES[type]}${['full', 'upper', 'lower', 'circuito'].includes(type) ? ' ' + letter : ''}`;
+  return { type, kind: 'forza', title, minutes, blocks };
 }
 
 function cardioSession(type, minutes, p, d, variant, phase) {
@@ -589,14 +606,95 @@ function mobilitySession(minutes, p, d, variant) {
   };
 }
 
+// postura: per chi passa la giornata seduto (dorsale, anche, glutei, spalle)
+const POSTURE_FLOW = ['m_openbook', 'm_gatto', 'm_flessori', 'h_ponte', 'g_clam', 'w_angeli', 'r_ytw', 'c_birddog', 'm_pett', 'v_wallslide', 'm_9090', 'c_deadbug', 'm_collo'];
+function postureSession(minutes, p, d, variant) {
+  const warm = minutes >= 15 ? 2 : 1;
+  const main = minutes - warm - 2;
+  const pool = POSTURE_FLOW.map((id) => BY_ID[id]).filter((e) => e && allowed(e, d, 1));
+  const tgt = targetedStretches(d, p).filter((e) => !pool.includes(e));
+  const all = [...tgt, ...pool];
+  const n = clamp(Math.floor(main / 1.8), 4, Math.min(9, all.length));
+  const start = (variant * 3) % Math.max(1, all.length - n + 1);
+  const chosen = all.slice(start, start + n);
+  return {
+    type: 'postura', kind: 'mobilita', title: TITLES.postura, minutes,
+    blocks: [
+      { name: 'Sblocco', minutes: warm, items: pickMany('warmup', d, 2, variant).map((e) => item(e, '45 s')) },
+      { name: 'Sequenza postura', minutes: main, note: 'Pensata per chi lavora seduto: apre petto e anche, riattiva glutei e muscoli tra le scapole. Movimenti lenti e controllati.', items: chosen.map((e) => item(e, e.cat === 'strength' ? (e.unit === 'sec' ? '2 × 30 s' : '2 × 10–12') : '60 s', e.cat === 'strength' ? 20 : 0)) },
+      { name: 'Respiro', minutes: 2, items: [item(BY_ID.m_respiro, '2 min')] },
+    ],
+  };
+}
+
 export function buildSession(type, minutes, p, d, variant, phase) {
   if (TYPE_KIND[type] === 'cardio') return cardioSession(type, minutes, p, d, variant, phase);
   if (type === 'mobilita') return mobilitySession(minutes, p, d, variant);
+  if (type === 'postura') return postureSession(minutes, p, d, variant);
   return strengthSession(type, minutes, p, d, variant, phase);
+}
+
+export function slotsOf(p) {
+  if (p.sessioni?.length) return p.sessioni.filter((s) => s.giorni > 0);
+  return [{ giorni: p.giorni, minuti: p.minuti, luogo: (p.attrezzi || []).includes('palestra') ? 'palestra' : 'casa' }];
+}
+export const weeklyMinutes = (p) => slotsOf(p).reduce((a, s) => a + s.giorni * s.minuti, 0);
+export const weeklyDays = (p) => Math.min(7, slotsOf(p).reduce((a, s) => a + s.giorni, 0));
+
+// attrezzi disponibili per luogo
+function equipFor(p, luogo) {
+  const home = (p.attrezzi || []).filter((a) => a !== 'palestra');
+  if (luogo === 'palestra') return new Set(['corpo', 'palestra', 'manubri', 'elastici', 'sbarra', 'tapis', 'bici', ...home]);
+  if (luogo === 'aperto') return new Set(['corpo', ...home.filter((a) => ['bici', 'corda', 'piscina', 'elastici'].includes(a))]);
+  return new Set(['corpo', ...home.filter((a) => a !== 'piscina')]);
+}
+
+const SHORT_TYPES = {
+  dimagrire: ['circuito', 'intervalli', 'core', 'circuito', 'cardio'],
+  massa: ['focus', 'core', 'focus', 'mobilita', 'core'],
+  tonificare: ['circuito', 'core', 'focus', 'intervalli', 'circuito'],
+  resistenza: ['cardio', 'intervalli', 'core', 'cardio', 'mobilita'],
+  mobilita: ['mobilita', 'core', 'mobilita', 'postura', 'mobilita'],
+  salute: ['cardio', 'core', 'mobilita', 'cardio', 'focus'],
+};
+
+function mixedSchedule(p, d, week) {
+  const slots = slotsOf(p).map((s, i) => ({ ...s, i }));
+  const main = slots.filter((s) => s.minuti >= 30).sort((a, b) => b.minuti - a.minuti);
+  const short = slots.filter((s) => s.minuti < 30);
+  const { phase } = mesoPhase(week);
+  const out = WEEKDAYS.map((label, i) => ({ weekday: i, label, session: null }));
+  const counters = {};
+  const make = (type, slot) => {
+    counters[type] = counters[type] || 0;
+    const variant = counters[type]++;
+    const dd = { ...d, equip: equipFor(p, slot.luogo) };
+    if (!dd.hiitOk && type === 'circuito' && dd.blocked.has('impatto')) type = 'full';
+    const ses = buildSession(type, slot.minuti, p, dd, variant, phase);
+    ses.luogo = slot.luogo;
+    return ses;
+  };
+  // sessioni principali (le più lunghe) distribuite nella settimana
+  const mainDays = Math.min(7, main.reduce((a, s) => a + s.giorni, 0));
+  const mainTpl = mainDays >= 2 ? [...TEMPLATES[p.obiettivo][mainDays]] : mainDays === 1 ? ['full'] : [];
+  const mainSlots = DAY_SLOTS[mainDays] || [];
+  let k = 0;
+  for (const s of main) for (let j = 0; j < s.giorni && k < mainSlots.length; j++, k++) out[mainSlots[k]].session = make(mainTpl[k], s);
+  // sessioni brevi nei giorni liberi, ben distribuite
+  const free = out.filter((x) => !x.session).map((x) => x.weekday);
+  const shortDays = Math.min(free.length, short.reduce((a, s) => a + s.giorni, 0));
+  const pick = shortDays >= free.length ? free : Array.from({ length: shortDays }, (_, i) => free[Math.floor((i + 0.5) * free.length / shortDays)]);
+  let types = [...(SHORT_TYPES[p.obiettivo] || SHORT_TYPES.salute)];
+  if (p.lavoro === 'sedentario' && !types.slice(0, shortDays).includes('postura')) types.splice(Math.min(2, shortDays - 1), 0, 'postura');
+  if (!d.hiitOk) types = types.map((x) => (x === 'intervalli' ? 'cardio' : x));
+  let q = 0;
+  for (const s of short) for (let j = 0; j < s.giorni && q < pick.length; j++, q++) out[pick[q]].session = make(types[q % types.length], s);
+  return out;
 }
 
 export function weekSchedule(p, week = 1, ctx = {}) {
   const d = derive(p, ctx);
+  if (p.sessioni?.filter((x) => x.giorni > 0).length > 1) return mixedSchedule(p, d, week);
   const days = clamp(p.giorni, 2, 7);
   let tpl = [...TEMPLATES[p.obiettivo][days]];
   if (!d.hiitOk) tpl = tpl.map((t) => (t === 'circuito' && d.blocked.has('impatto') ? 'full' : t));
@@ -626,7 +724,7 @@ export function nutrition(p, opts = {}) {
   const bmr = lean ? 370 + 21.6 * lean : 10 * w + 6.25 * p.altezza - 5 * p.eta + (p.sesso === 'M' ? 5 : -161);
   let pal = d.steps < 3000 ? 1.2 : d.steps < 5000 ? 1.25 : d.steps < 7500 ? 1.3 : d.steps < 10000 ? 1.4 : 1.5;
   if (p.lavoro === 'fisico') pal += 0.1; else if (p.lavoro === 'in_piedi') pal += 0.05;
-  pal += clamp(p.giorni * p.minuti * 0.00035, 0, 0.3);
+  pal += clamp(weeklyMinutes(p) * 0.00035, 0, 0.3);
   const tdee = bmr * pal;
 
   const notes = [];
@@ -687,6 +785,8 @@ export function nutrition(p, opts = {}) {
   let refW = d.bmi >= 30 ? 25 * (p.altezza / 100) ** 2 : w;
   let gkg = { deficit: 1.8, surplus: 1.8, mantenimento: goal === 'tonificare' || goal === 'massa' ? 1.8 : goal === 'resistenza' ? 1.5 : 1.3 }[mode];
   if (lean) { refW = lean; gkg = { deficit: 2.3, surplus: 2.2, mantenimento: goal === 'tonificare' || goal === 'massa' ? 2.2 : goal === 'resistenza' ? 1.9 : 1.7 }[mode]; }
+  gkg *= PROTEIN_FACTOR[p.dieta] || 1;
+  if (PROTEIN_FACTOR[p.dieta] > 1) notes.push(`Con un’alimentazione ${DIET_LABEL[p.dieta].toLowerCase()} le proteine sono aumentate del ${Math.round((PROTEIN_FACTOR[p.dieta] - 1) * 100)}%: quelle vegetali sono un po’ meno digeribili.`);
   if (d.cond.has('reni')) { gkg = 0.8; notes.push('Con una malattia renale le proteine vanno concordate con il nefrologo: il valore indicato è prudenziale.'); }
   if (d.cond.has('gravidanza')) gkg = Math.max(gkg, 1.2);
   const protein = round(refW * gkg, 5);
@@ -695,7 +795,8 @@ export function nutrition(p, opts = {}) {
   const water = round(w * 0.035, 0.1);
   if (d.cond.has('diabete')) notes.push('Con il diabete distribuisci i carboidrati nei pasti, preferisci quelli integrali e controlla la glicemia prima e dopo l’allenamento.');
 
-  return { bmr: Math.round(bmr), tdee: Math.round(tdee), kcal, protein, fat, carbs, water, fiber: Math.round(kcal / 1000 * 14), mode, rate, target, notes };
+  const dieta = p.dieta || 'onnivora';
+  return { bmr: Math.round(bmr), tdee: Math.round(tdee), kcal, protein, fat, carbs, water, fiber: Math.round(kcal / 1000 * 14), mode, rate, target, notes, dieta, meals: mealPlan(protein, dieta), dietTips: dietNotes(dieta, p) };
 }
 
 export function timeline(p, nutri, startISO) {
@@ -769,7 +870,7 @@ export function habits(p, ctx = {}) {
   if (p.alimentazione === 'disordinata') out.push({ icon: '🥗', title: 'Sistema i pasti base', text: 'Metà piatto di verdure, un quarto di proteine (carne, pesce, uova, legumi, latticini), un quarto di carboidrati integrali. Pochi snack confezionati e bibite zuccherate.', priority: 1 });
   else out.push({ icon: '🥗', title: 'Proteine a ogni pasto', text: 'Distribuisci le proteine su 3–4 pasti: aiuta a mantenere i muscoli e a controllare la fame.', priority: 3 });
   if (p.stress === 'alto') out.push({ icon: '🌬️', title: 'Gestisci lo stress', text: '5 minuti al giorno di respirazione lenta (4 secondi dentro, 6 fuori) e camminate all’aperto. Il movimento è uno dei migliori anti-stress.', priority: 2 });
-  if (p.giorni * p.minuti < 150) out.push({ icon: '⏱️', title: 'Arriva a 150 minuti a settimana', text: `Con il tempo scelto fai ${p.giorni * p.minuti} minuti a settimana di allenamento. L’OMS consiglia almeno 150 minuti di attività moderata: completa con camminate veloci.`, priority: 2 });
+  if (weeklyMinutes(p) < 150) out.push({ icon: '⏱️', title: 'Arriva a 150 minuti a settimana', text: `Con il tempo scelto fai ${weeklyMinutes(p)} minuti a settimana di allenamento. L’OMS consiglia almeno 150 minuti di attività moderata: completa con camminate veloci.`, priority: 2 });
   if (d.cond.has('diabete')) out.push({ icon: '🩸', title: 'Cammina dopo i pasti', text: 'Una camminata di 10–15 minuti dopo i pasti principali aiuta molto a tenere sotto controllo la glicemia.', priority: 1 });
   if (d.age >= 65) out.push({ icon: '⚖️', title: 'Allena l’equilibrio', text: 'Gli esercizi di equilibrio sono inclusi nei tuoi allenamenti: riducono il rischio di cadute. Falli sempre vicino a un appoggio.', priority: 2 });
   out.push({ icon: '💧', title: 'Bevi a sufficienza', text: `Circa ${round(p.peso * 0.035, 0.1).toFixed(1)} litri al giorno, mezzo litro in più nei giorni di allenamento.`, priority: 3, key: 'acqua' });
@@ -841,8 +942,43 @@ export function generatePlanFull(p, opts = {}) {
   const plan = generatePlanBase(p, opts);
   const used = new Set(plan.schedule.flatMap((x) => (x.session ? x.session.blocks.flatMap((b) => b.items.map((i) => i.id)) : [])));
   plan.personal = personalFactors(p, plan._d, plan.profile, plan.nutrition, used);
+  plan.summary = coachSummary(p, plan);
   delete plan._d;
   return plan;
+}
+
+// ------------------------------------------------------------------
+// Il piano in breve: relazione del coach
+// ------------------------------------------------------------------
+
+const LUOGO = { palestra: 'in palestra', casa: 'a casa', aperto: 'all’aperto' };
+export function coachSummary(p, plan) {
+  const out = [];
+  const days = plan.schedule.filter((x) => x.session);
+  const slots = slotsOf(p);
+  const goal = { dimagrire: 'perdere grasso mantenendo i muscoli', massa: 'aumentare la massa muscolare', tonificare: 'tonificare', resistenza: 'migliorare la resistenza', mobilita: 'migliorare mobilità e postura', salute: 'stare meglio e prevenire' }[p.obiettivo];
+  const wm = weeklyMinutes(p);
+  out.push({ icon: '🗓️', title: 'La tua settimana', text: `${days.length} allenamenti, ${wm} minuti in tutto, per ${goal}. ${wm >= 150 ? 'Sei sopra i 150 minuti consigliati dall’OMS.' : 'Le camminate completano i 150 minuti consigliati dall’OMS.'}` });
+  if (slots.length > 1) {
+    for (const s of slots) {
+      const ds = days.filter((x) => x.session.luogo === s.luogo && x.session.minutes === s.minuti);
+      if (!ds.length) continue;
+      const names = [...new Set(ds.map((x) => x.session.title.replace(/ [ABC]$/, '').toLowerCase()))];
+      const role = s.minuti >= 30
+        ? 'sono il cuore del piano: lavoro di forza completo su tutto il corpo con carichi progressivi'
+        : 'completano le sessioni lunghe senza affaticarti: brevi, mirate e facili da incastrare nella giornata';
+      out.push({ icon: s.luogo === 'palestra' ? '🏋️' : s.luogo === 'casa' ? '🏠' : '🌳', title: `${ds.length} × ${s.minuti} minuti ${LUOGO[s.luogo]} (${ds.map((x) => x.label).join(', ')})`, text: `Queste sessioni ${role}. Contenuto: ${names.join(', ')}.` });
+    }
+  }
+  if (p.lavoro === 'sedentario') {
+    const steps = plan.habits.find((h) => h.key === 'passi');
+    out.push({ icon: '🪑', title: 'Lavori seduto', text: `${days.some((x) => x.session.type === 'postura') ? 'Una sessione a settimana è dedicata alla postura (dorsale, anche, glutei, spalle). ' : ''}Ogni riscaldamento e defaticamento include mobilità di anche e torace. Fuori dall’allenamento: alzati ogni 45–60 minuti e punta a ${steps?.target?.toLocaleString('it-IT') || '8.000'} passi al giorno, perché il movimento quotidiano conta quanto l’allenamento.` });
+  }
+  if (p.dieta && p.dieta !== 'onnivora') {
+    out.push({ icon: '🥗', title: `Alimentazione ${DIET_LABEL[p.dieta].toLowerCase()}`, text: `${plan.nutrition.kcal.toLocaleString('it-IT')} kcal e ${plan.nutrition.protein} g di proteine al giorno, con una giornata tipo costruita sui tuoi alimenti e le integrazioni da valutare (B12, omega-3).` });
+  }
+  if (plan.timeline.hasWeight) out.push({ icon: '🎯', title: 'Traguardo', text: `${plan.nutrition.target} kg intorno al ${formatDate(plan.timeline.eta)}, a ${plan.timeline.rate.toLocaleString('it-IT', { maximumFractionDigits: 2 })} kg a settimana.${plan.timeline.warning ? ' La data che avevi indicato è troppo vicina per farlo in modo sano.' : ''}` });
+  return out;
 }
 
 // ------------------------------------------------------------------
@@ -926,7 +1062,7 @@ export function analyzeProgress(state, plan, todayISO = toISO(new Date())) {
   out.adherence = planned ? Math.round((done / planned) * 100) : null;
 
   if (planned >= 4 && out.adherence < 60) {
-    const fewerDays = Math.max(2, p.giorni - 1);
+    const fewerDays = Math.max(2, weeklyDays(p) - 1);
     out.suggestions.push({
       text: `Negli ultimi 14 giorni hai completato ${done} allenamenti su ${planned}. Meglio un piano più leggero che riesci a seguire: prova ${fewerDays} giorni a settimana.`,
       action: { type: 'giorni', value: fewerDays, label: `Passa a ${fewerDays} giorni` },

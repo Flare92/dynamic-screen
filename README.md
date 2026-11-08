@@ -8,6 +8,14 @@ PWA (installabile sul telefono, funziona offline) che crea un piano di allenamen
 - **obiettivo**: perdere peso, massa muscolare, tonificare, resistenza, mobilità, salute (con peso e data obiettivo facoltativi)
 - **tempo**: minuti al giorno (10–120) e giorni a settimana (2–7), attrezzi disponibili
 
+## Novità della versione 4: la tua relazione diventa il piano
+
+- **Relazione iniziale in testo libero** (o dettata a voce): 7 domande guida si accendono man mano che il testo le copre. L’app ricava età, misure, sessioni (frequenza, durata e luogo di ciascuna), lavoro, sonno, dieta, dolori con la loro intensità, condizioni di salute, obiettivo e scadenza, poi mostra **"Ecco cosa ho capito"** per confermare o correggere prima di generare il piano.
+- **Due livelli di analisi**: l’analizzatore integrato (offline, gratuito, regole per l’italiano) e, facoltativa, l’**analisi avanzata con Claude** usando la propria chiave API di Anthropic: `claude-opus-5-5`, output JSON strutturato, fallback automatico in caso di rifiuto e ritorno all’analisi integrata se manca la rete. La chiave resta solo sul dispositivo e non finisce nei backup.
+- **Settimane miste**: più tipi di sessione con durata, luogo e attrezzi diversi (es. 2 × 60′ in palestra + 4 × 20′ a casa). Le sessioni lunghe portano la forza completa; quelle brevi completano con circuiti, intervalli, core, **postura per chi lavora seduto** e **focus sui punti deboli**, sempre con gli attrezzi disponibili in quel luogo.
+- **Alimentazione per tipo di dieta** (onnivora, flessitariana, pescetariana, vegetariana, latto-vegetariana, vegana): proteine adeguate, **giornata tipo** con porzioni calcolate sul fabbisogno, integrazioni da valutare (B12, ferro, omega-3, creatina).
+- **Il tuo piano in breve**: una relazione del coach che spiega come la settimana è costruita sulla tua situazione.
+
 ## Novità della versione 3: personalizzazione misurata
 
 - **Punto di partenza reale**: circonferenze (vita, collo, fianchi) → massa grassa (formula U.S. Navy), massa magra e rapporto vita/altezza; frequenza cardiaca a riposo e pressione; **mappa dei dolori** per 8 zone del corpo.
@@ -88,12 +96,14 @@ js/exercises.js       database esercizi con controindicazioni
 js/guide.js           guida tecnica dettagliata di ogni esercizio
 js/assessment.js      test, punteggi, composizione corporea, KPI, indice di precisione
 js/assess-ui.js       valutazione guidata con cronometro, metronomo e 3D
+js/narrative.js       relazione in testo libero: analisi offline e con Claude
+js/diet.js            alimentazione per tipo di dieta e giornata tipo
 js/motions.js         pose chiave delle animazioni 3D
 js/viewer3d.js        manichino 3D, animazione, attrezzi, muscoli evidenziati
 js/player.js          allenamento guidato a schermo intero
 js/sheet.js           scheda esercizio (3D + guida)
 js/fx.js              icone, effetti, suoni, voce
-vendor/               three.js (MIT)
+vendor/               three.js (MIT), SDK Anthropic pre-impacchettato (MIT, caricato solo per l’analisi con Claude)
 fonts/                Space Grotesk e JetBrains Mono (SIL OFL 1.1)
 dev/pose-lab.html     pagina di sviluppo per controllare le animazioni una per una
 tests/                test (node --test)
