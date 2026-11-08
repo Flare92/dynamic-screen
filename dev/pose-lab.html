@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pose lab</title>
+<style>body{margin:0;background:#07090c;color:#cfe;font:14px system-ui}#v{width:360px;height:360px}#l{padding:6px}</style></head>
+<body><div id="v"></div><div id="l"></div>
+<script type="module">
+import { createViewer } from '../js/viewer3d.js';
+import { MOTION_MAP } from '../js/motions.js';
+const v = createViewer(document.getElementById('v'));
+window.ids = Object.keys(MOTION_MAP);
+window.v = v; window.show = (id, frac, muscles = []) => { v.setMotion(id, muscles); v.snapshot(frac); if (window.az !== undefined) v.view(window.az); document.getElementById('l').textContent = id + ' · ' + MOTION_MAP[id]; };
+window.ready = true;
+</script></body></html>

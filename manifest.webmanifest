@@ -1,0 +1,19 @@
+{
+  "name": "Ritmo – la tua routine",
+  "short_name": "Ritmo",
+  "description": "Piano di allenamento personalizzato in base a corpo, salute, abitudini e tempo a disposizione.",
+  "lang": "it",
+  "start_url": "./#/oggi",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#05070a",
+  "theme_color": "#05070a",
+  "categories": ["health", "fitness", "lifestyle"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
