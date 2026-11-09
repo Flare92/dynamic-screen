@@ -14,8 +14,8 @@ Mappa rapida dei moduli (comunità del grafo):
 - `js/engine.js` – motore del piano: `derive`, `weekSchedule`/`mixedSchedule`, sessioni, `nutrition`, `generatePlan`, `coachSummary`
 - `js/assessment.js` + `js/assess-ui.js` – test fisici, punteggi, composizione corporea, KPI, precisione
 - `js/narrative.js` – relazione in testo libero: analisi offline in italiano e analisi con Claude
-- `js/gymreview.js` – revisione della scheda di palestra dell’utente: `parseGymList`, `reviewGym` (tieni/cambia/togli/aggiungi), preferiti nel piano
+- `js/gymreview.js` – revisione della scheda di palestra dell’utente: `parseGymList`, `reviewGym` (tieni/cambia/togli/aggiungi), `GYM_PICKS` (elenco da toccare), preferiti nel piano
 - `js/diet.js` – alimentazione per tipo di dieta e giornata tipo
 - `js/exercises.js`, `js/guide.js`, `js/motions.js` – esercizi, guide tecniche, pose 3D
 - `js/viewer3d.js`, `js/sheet.js`, `js/player.js`, `js/fx.js` – 3D, scheda esercizio, allenamento guidato, effetti
-- Test: `npm test` (node --test, 37 test)
+- Test: `npm test` (node --test, 38 test)

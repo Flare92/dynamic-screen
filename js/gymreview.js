@@ -29,6 +29,7 @@ export const CATALOG = [
   C(/panca.*manubri|distension.*manubri|spinte.*manubri.*panca/, { name: 'Panca con manubri', id: 'p_panca_man', pat: 'push_h', tipo: 'fondamentale', mus: 'pettorali' }),
   C(/panca|bench/, { name: 'Panca piana', id: 'p_panca', pat: 'push_h', tipo: 'fondamentale', mus: 'pettorali' }),
   C(/chest ?press/, { name: 'Chest press', id: 'p_machine', pat: 'push_h', tipo: 'fondamentale', mus: 'pettorali' }),
+  C(/rear delt|deltoidi posteriori|alzate posteriori|alzate (a busto )?(90|inclinato)|reverse fly|croci inverse/, { name: 'Alzate posteriori', id: null, pat: 'pull_h', tipo: 'isolamento', mus: 'deltoidi posteriori' }),
   C(/croci|pec ?deck|butterfly|\bfly\b|chest fly|cavi incrociati|crossover/, { name: 'Croci / pec deck', id: null, pat: 'push_h', tipo: 'isolamento', mus: 'pettorali' }),
   C(/piegament|flession|push ?up/, { name: 'Piegamenti', id: 'p_classici', pat: 'push_h', tipo: 'fondamentale', mus: 'pettorali' }),
   C(/\bdip/, { name: 'Dip', id: 'p_dip', pat: 'push_h', tipo: 'complementare', mus: 'tricipiti e pettorali' }),
@@ -37,7 +38,6 @@ export const CATALOG = [
   C(/alzate laterali|laterali|lateral raise/, { name: 'Alzate laterali', id: 'v_alzate', pat: 'push_v', tipo: 'isolamento', mus: 'deltoidi laterali' }),
   C(/alzate frontali|frontali/, { name: 'Alzate frontali', id: null, pat: 'push_v', tipo: 'isolamento', mus: 'deltoidi anteriori' }),
   C(/face ?pull/, { name: 'Face pull', id: null, pat: 'pull_h', tipo: 'complementare', mus: 'deltoidi posteriori e cuffia' }),
-  C(/rear delt|deltoidi posteriori|alzate (a busto )?(90|inclinato)|reverse fly|croci inverse/, { name: 'Alzate posteriori', id: null, pat: 'pull_h', tipo: 'isolamento', mus: 'deltoidi posteriori' }),
   C(/lat ?machine|pulldown|lat ?pull|tirate (al petto|alla lat)/, { name: 'Lat machine', id: 't_lat', pat: 'pull_v', tipo: 'fondamentale', mus: 'dorsali' }),
   C(/trazion|pull ?up|chin ?up/, { name: 'Trazioni', id: 't_trazioni', pat: 'pull_v', tipo: 'fondamentale', mus: 'dorsali' }),
   C(/pulley|rematore (al |ai |con )?cav|low row|seated row/, { name: 'Pulley basso', id: 'r_pulley', pat: 'pull_h', tipo: 'fondamentale', mus: 'dorsali e romboidi' }),
@@ -57,6 +57,28 @@ export const CATALOG = [
   C(/stepper|scala/, { name: 'Stepper', id: 'x_salita', pat: 'cardio', tipo: 'cardio', mus: 'cuore' }),
 ];
 
+// esercizi e macchinari da scegliere con un tocco (ogni nome è riconosciuto da CATALOG)
+export const GYM_PICKS = [
+  { id: 'gambe', label: 'Gambe e glutei', icon: '🦵', items: [
+    ['Squat con bilanciere'], ['Leg press', 1], ['Hack squat', 1], ['Goblet squat'], ['Affondi'], ['Split squat bulgaro'], ['Step up'],
+    ['Leg extension', 1], ['Leg curl', 1], ['Stacco da terra'], ['Stacco rumeno'], ['Hip thrust'], ['Abductor machine', 1], ['Adductor machine', 1], ['Calf raise', 1]] },
+  { id: 'petto', label: 'Petto', icon: '🫁', items: [
+    ['Panca piana'], ['Panca inclinata'], ['Panca con manubri'], ['Chest press', 1], ['Pec deck', 1], ['Croci ai cavi', 1], ['Piegamenti'], ['Dip']] },
+  { id: 'schiena', label: 'Schiena', icon: '🔙', items: [
+    ['Lat machine', 1], ['Trazioni'], ['Pulley basso', 1], ['Rematore con bilanciere'], ['Rematore con manubrio'], ['Face pull', 1], ['Iperestensioni', 1], ['Scrollate']] },
+  { id: 'spalle', label: 'Spalle', icon: '🏔️', items: [
+    ['Shoulder press', 1], ['Lento avanti'], ['Alzate laterali'], ['Alzate frontali'], ['Alzate posteriori'], ['Tirate al mento']] },
+  { id: 'braccia', label: 'Braccia', icon: '💪', items: [
+    ['Curl con bilanciere'], ['Curl con manubri'], ['Hammer curl'], ['Push down ai cavi', 1], ['French press'], ['Kick back']] },
+  { id: 'core', label: 'Addominali e core', icon: '🎯', items: [
+    ['Crunch'], ['Plank'], ['Russian twist'], ['Ab wheel'], ['Farmer walk']] },
+  { id: 'cardio', label: 'Cardio', icon: '❤️', items: [
+    ['Tapis roulant', 1], ['Cyclette', 1], ['Ellittica', 1], ['Vogatore', 1], ['Stepper', 1]] },
+].map((g) => ({ ...g, items: g.items.map(([name, machine]) => ({ name, machine: !!machine })) }));
+
+/** la riga della lista corrisponde all'esercizio scelto (anche se l'utente ha aggiunto serie e kg) */
+export const lineIsPick = (line, name) => line.trim().toLowerCase().startsWith(name.toLowerCase());
+
 const PAT_LABEL = { squat: 'squat (gambe)', lunge: 'affondi (una gamba)', hinge: 'cerniera d’anca (catena posteriore)', push_h: 'spinta orizzontale (petto)', push_v: 'spinta verticale (spalle)', pull_h: 'tirata orizzontale (schiena)', pull_v: 'tirata verticale (dorsali)', core: 'core', glutei: 'glutei', calf: 'polpacci', braccia: 'braccia', cardio: 'cardio' };
 
 // ------------------------------------------------------------------
@@ -75,9 +97,9 @@ export function parseGymList(text) {
     if (!e && !/[a-z]{3}/.test(clean)) continue;
     out.push({ raw: clean || raw, key: e ? e.name : null, sets: sr ? +sr[1] : null, reps: sr ? +sr[2] : null, kg: kg ? +kg[1].replace(',', '.') : null });
   }
-  // un esercizio riconosciuto una sola volta
+  // la stessa riga una sola volta (due varianti dello stesso esercizio restano distinte)
   const seen = new Set();
-  return out.filter((x) => { const k = x.key || x.raw; if (seen.has(k)) return false; seen.add(k); return true; });
+  return out.filter((x) => { const k = x.raw; if (seen.has(k)) return false; seen.add(k); return true; });
 }
 
 /** frasi del racconto che elencano esercizi di palestra */
@@ -101,7 +123,8 @@ const NEED = {
 export function reviewGym(p, list, ctx = {}) {
   const items = list.map((x) => {
     const e = CATALOG.find((c) => c.name === x.key) || null;
-    return { ...x, entry: e, name: e ? e.name : x.raw };
+    // il nome come lo ha scritto (o scelto) l'utente
+    return { ...x, entry: e, name: x.raw.charAt(0).toUpperCase() + x.raw.slice(1) };
   });
   const goal = p.obiettivo;
   const res = [];

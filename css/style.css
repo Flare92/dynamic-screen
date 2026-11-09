@@ -597,3 +597,22 @@ details.day .day-body { padding: 0 16px 14px; }
 .gym-item.v-cambia, .gym-item.v-togli { border-left-color: var(--hot); }
 .gym-item .link { font: inherit; color: inherit; text-decoration: underline; text-decoration-color: var(--cyan); text-underline-offset: 3px; text-align: left; }
 #gym-text { min-height: 200px; }
+.pick-group { border: 1px solid var(--line); border-radius: 18px; background: var(--glass); margin-bottom: 10px; }
+.pick-group summary { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; cursor: pointer; font: 600 16px var(--display); list-style: none; }
+.pick-group summary::-webkit-details-marker { display: none; }
+.pick-group summary::after { content: '▾'; color: var(--ink-3); margin-left: 8px; transition: transform .25s var(--ease); }
+.pick-group[open] summary::after { transform: rotate(180deg); }
+.pick-group summary .chip { margin-left: auto; }
+.pick-grid { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 14px 14px; }
+.pick-grid button {
+  border: 1px solid var(--line); background: rgba(255, 255, 255, .035); border-radius: 14px;
+  padding: 10px 14px; min-height: 44px; cursor: pointer; font: 550 14.5px var(--display); color: var(--ink);
+  display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; transition: all .25s var(--ease);
+}
+.pick-grid button small { font: 500 9.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.pick-grid button:active { transform: scale(.96); }
+.pick-grid button.on {
+  background: rgba(198, 255, 61, .12); color: var(--volt); border-color: rgba(198, 255, 61, .55);
+  box-shadow: 0 0 0 1px rgba(198, 255, 61, .2) inset, 0 0 18px rgba(198, 255, 61, .18);
+}
+.pick-grid button.on small { color: var(--volt); opacity: .7; }

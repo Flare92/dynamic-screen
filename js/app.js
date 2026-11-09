@@ -14,7 +14,7 @@ import {
 } from './assessment.js';
 import { QUESTIONS, EXAMPLE, DIETS, parseNarrative, coverage, analyzeWithClaude, mergeAI } from './narrative.js';
 import { DIET_LABEL } from './diet.js';
-import { parseGymList, reviewGym, VERDICT_LABEL, VERDICT_COUNT } from './gymreview.js';
+import { parseGymList, reviewGym, VERDICT_LABEL, VERDICT_COUNT, GYM_PICKS, lineIsPick } from './gymreview.js';
 import { startAssessment, renderAssessment, mountAssessment, handleAssessmentClick, assessmentActive, cancelAssessment } from './assess-ui.js';
 
 // ==================================================================
@@ -1050,7 +1050,7 @@ const VERDICT_CLASS = { tieni: 'ok', cautela: 'cyan', cambia: 'hot', riduci: 'vi
 
 function gymAnalysisHTML(text) {
   const r = gymReview(text);
-  if (!r) return '<p class="small muted">Scrivi i tuoi esercizi: l’analisi compare qui mentre scrivi.</p>';
+  if (!r) return '<p class="small muted">Scegli i tuoi esercizi: l’analisi compare qui mentre li aggiungi.</p>';
   const ex = (id, name) => (id ? `<button type="button" class="link" data-action="open-ex" data-id="${id}">${esc(name)}</button>` : esc(name));
   const counts = r.items.reduce((a, x) => { a[x.verdict] = (a[x.verdict] || 0) + 1; return a; }, {});
   return `
@@ -1079,22 +1079,60 @@ function viewGym() {
   </div>
   <section class="stack-lg">
     <div class="${R(1)}"><h1>Cosa fai in palestra?</h1>
-      <p class="muted" style="margin-top:8px">Scrivi gli esercizi che fai di solito. Li confronto con il tuo obiettivo, la tua salute e i tuoi test: ti dico cosa tenere, cosa cambiare, cosa togliere e cosa manca.</p></div>
-    <div class="story-box ${R(2)}"><textarea id="gym-text" placeholder="${esc(GYM_PLACEHOLDER)}">${esc(text)}</textarea></div>
+      <p class="muted" style="margin-top:8px">Tocca gli esercizi e i macchinari che usi di solito. Li confronto con il tuo obiettivo, la tua salute e i tuoi test: ti dico cosa tenere, cosa cambiare, cosa togliere e cosa manca.</p></div>
+    <div class="search ${R(2)}">${ICON.search}<input type="text" id="gym-q" placeholder="Cerca esercizio o macchinario" autocomplete="off"></div>
+    <div id="gym-picker" class="${R(2)}">${gymPickerHTML(text)}</div>
+    <div class="${R(3)}">
+      <div class="row between"><b>La tua lista</b><span class="mono small muted" id="gym-count">${gymLines(text).length} esercizi</span></div>
+      <p class="small muted" style="margin-top:4px">Facoltativo: aggiungi serie e carichi (es. “Panca piana 4x8 60 kg”) o esercizi che non trovi nell’elenco.</p>
+      <div class="story-box" style="margin-top:8px"><textarea id="gym-text" placeholder="${esc(GYM_PLACEHOLDER)}">${esc(text)}</textarea></div>
+    </div>
     <section class="card ${R(3)}" id="gym-out">${gymAnalysisHTML(text)}</section>
     <div class="wizard-actions"><button class="btn primary" data-action="gym-done">Aggiorna il mio piano</button></div>
   </section>`;
+}
+const gymLines = (text) => String(text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+function gymPickerHTML(text, q = '') {
+  const lines = gymLines(text);
+  const qq = q.trim().toLowerCase();
+  const groups = GYM_PICKS.map((g) => ({ ...g, items: g.items.filter((it) => !qq || it.name.toLowerCase().includes(qq) || g.label.toLowerCase().includes(qq)) })).filter((g) => g.items.length);
+  if (!groups.length) return '<p class="small muted">Nessun esercizio trovato: scrivilo nella tua lista qui sotto.</p>';
+  return groups.map((g) => {
+    const n = g.items.filter((it) => lines.some((l) => lineIsPick(l, it.name))).length;
+    return `<details class="pick-group" data-g="${g.id}" ${qq || n || g.id === 'gambe' ? 'open' : ''}>
+      <summary><span>${g.icon} ${g.label}</span>${n ? `<span class="chip volt">${n}</span>` : ''}</summary>
+      <div class="pick-grid">${g.items.map((it) => `<button type="button" data-action="gym-pick" data-name="${esc(it.name)}" class="${lines.some((l) => lineIsPick(l, it.name)) ? 'on' : ''}" aria-pressed="${lines.some((l) => lineIsPick(l, it.name))}"><span>${lines.some((l) => lineIsPick(l, it.name)) ? '✓ ' : ''}${esc(it.name)}</span>${it.machine ? '<small>macchina</small>' : ''}</button>`).join('')}</div>
+    </details>`;
+  }).join('');
+}
+function gymRefresh(text, picker = true) {
+  state.profile.schedaPalestra = text; save();
+  document.getElementById('gym-out').innerHTML = gymAnalysisHTML(text);
+  document.getElementById('gym-count').textContent = `${gymLines(text).length} esercizi`;
+  if (picker) {
+    const box = document.getElementById('gym-picker');
+    const open = new Set([...box.querySelectorAll('details[open]')].map((d) => d.dataset.g));
+    box.innerHTML = gymPickerHTML(text, document.getElementById('gym-q').value);
+    box.querySelectorAll('details').forEach((d) => { if (open.has(d.dataset.g)) d.open = true; });
+  }
+}
+function toggleGymPick(name) {
+  const el = document.getElementById('gym-text');
+  const lines = gymLines(el.value);
+  const has = lines.some((l) => lineIsPick(l, name));
+  el.value = (has ? lines.filter((l) => !lineIsPick(l, name)) : [...lines, name]).join('\n');
+  haptic(8);
+  gymRefresh(el.value);
 }
 let gymTimer = null;
 function bindGym() {
   const el = document.getElementById('gym-text');
   el.addEventListener('input', () => {
     clearTimeout(gymTimer);
-    gymTimer = setTimeout(() => {
-      state.profile.schedaPalestra = el.value; save();
-      document.getElementById('gym-out').innerHTML = gymAnalysisHTML(el.value);
-    }, 300);
+    gymTimer = setTimeout(() => gymRefresh(el.value), 300);
   });
+  const q = document.getElementById('gym-q');
+  q.addEventListener('input', () => { document.getElementById('gym-picker').innerHTML = gymPickerHTML(el.value, q.value); });
 }
 // riquadro di richiamo (Oggi, Piano)
 function gymCard(cls = '') {
@@ -1446,6 +1484,7 @@ document.addEventListener('click', (e) => {
       break;
     }
     case 'pick-day': selectedDay = Number(t.dataset.day); showFeedback = false; rerender(); break;
+    case 'gym-pick': toggleGymPick(t.dataset.name); break;
     case 'gym-done': clearTimeout(gymTimer); { const el = document.getElementById('gym-text'); if (el) { state.profile.schedaPalestra = el.value; save(); } } location.hash = '#/piano'; toast('Piano aggiornato con la tua scheda'); break;
     case 'open-ex': {
       const id = t.dataset.id;

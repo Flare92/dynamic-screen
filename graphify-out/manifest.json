@@ -6,9 +6,9 @@
     "semantic_hash": "6e797710430a9dd9332d689328eb990b"
   },
   "js/app.js": {
-    "mtime": 1794219529.458884,
-    "seen": 1794219540.5617487,
-    "ast_hash": "6128aca3a7500f1d9074491f8d5ca9c6",
+    "mtime": 1794237679.7508492,
+    "seen": 1794237712.4982388,
+    "ast_hash": "346b45e9399dcd2d0ca323f58ee4e000",
     "semantic_hash": ""
   },
   "js/assess-ui.js": {
@@ -90,9 +90,9 @@
     "semantic_hash": "fdc1c7a41a90c4fa577f7832bf39d224"
   },
   "sw.js": {
-    "mtime": 1794219499.3205152,
-    "seen": 1794219540.5617812,
-    "ast_hash": "1b23e88b2045dffa53497a1a2421d0dc",
+    "mtime": 1794237673.270634,
+    "seen": 1794237712.4982822,
+    "ast_hash": "17386b1ed5213922918e7b0b79737e25",
     "semantic_hash": ""
   },
   "tests/assessment.test.js": {
@@ -144,21 +144,21 @@
     "semantic_hash": "a484183e3c3ca88b8883ea88f87a1a77"
   },
   "CLAUDE.md": {
-    "mtime": 1794219537.691915,
-    "seen": 1794219540.5617914,
-    "ast_hash": "47b3d385cf27033331e10418f10dec60",
+    "mtime": 1794237707.5342925,
+    "seen": 1794237712.4982986,
+    "ast_hash": "8753fa341da907680cbf5859ce6c4a2f",
     "semantic_hash": ""
   },
   "js/gymreview.js": {
-    "mtime": 1794219529.457043,
-    "seen": 1794219540.5617695,
-    "ast_hash": "8054378ae49fe2a84770406223843681",
+    "mtime": 1794237644.775191,
+    "seen": 1794237712.4982646,
+    "ast_hash": "2a1a957347cb5a4ce36f8b82e08e56e1",
     "semantic_hash": ""
   },
   "tests/gymreview.test.js": {
-    "mtime": 1794219485.9173253,
-    "seen": 1794219540.561787,
-    "ast_hash": "5a09d09339e51516b5f8e1d1db610589",
+    "mtime": 1794237679.75796,
+    "seen": 1794237712.4982915,
+    "ast_hash": "480c513cfc7498c8702b90a808e49929",
     "semantic_hash": ""
   }
 }
