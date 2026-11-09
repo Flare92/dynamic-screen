@@ -52,3 +52,33 @@ test('relazione: gli esercizi di palestra vengono letti dal testo', () => {
   assert.match(r.profile.schedaPalestra, /panca piana 4x8 50 kg/);
   assert.match(r.profile.schedaPalestra, /lat machine/);
 });
+
+test('scheda dalla lista: ogni voce viene riconosciuta come sé stessa', async () => {
+  const { pickerGroups } = await import('../js/gymreview.js');
+  const groups = pickerGroups();
+  assert.ok(groups.length >= 6);
+  for (const g of groups) for (const it of g.items) {
+    const l = parseGymList(it.label);
+    assert.equal(l.length, 1, it.label);
+    assert.equal(l[0].key, it.key, it.label);
+  }
+});
+
+test('scheda dalla lista: aggiungi, imposta serie e kg, togli, senza toccare il resto', async () => {
+  const { togglePick, setPickDetail, pickedFromText } = await import('../js/gymreview.js');
+  let t = 'Salto della corda magica\nPanca piana 4x8 60 kg';
+  t = togglePick(t, 'Lat machine');
+  assert.deepEqual(Object.keys(pickedFromText(t)).sort(), ['Lat machine', 'Panca piana']);
+  t = setPickDetail(t, 'Lat machine', { sets: 3, reps: 10, kg: 42.5 });
+  assert.deepEqual(pickedFromText(t)['Lat machine'], { sets: 3, reps: 10, kg: 42.5 });
+  t = setPickDetail(t, 'Panca piana', { sets: 5, reps: 5, kg: null });
+  assert.deepEqual(pickedFromText(t)['Panca piana'], { sets: 5, reps: 5, kg: null });
+  t = togglePick(t, 'Panca piana');
+  assert.ok(!pickedFromText(t)['Panca piana']);
+  assert.match(t, /^Salto della corda magica\n/, 'le righe scritte a mano restano');
+  // riga con più esercizi: si toglie solo quello scelto
+  t = togglePick('leg press, crunch', 'Crunch / addominali');
+  assert.deepEqual(Object.keys(pickedFromText(t)), ['Leg press']);
+  t = setPickDetail('', 'Curl per i bicipiti', { sets: 3, reps: 12 }, 'Curl bicipiti');
+  assert.equal(t, 'Curl bicipiti 3x12');
+});

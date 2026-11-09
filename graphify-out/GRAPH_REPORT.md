@@ -1,17 +1,17 @@
 # Graph Report - dynamic-screen  (2026-11-09)
 
 ## Corpus Check
-- 25 files · ~62,102 words
+- 25 files · ~63,302 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 4 file(s) not represented in the graph (top: (none) 2, .css 1, .webmanifest 1)
 
 ## Summary
-- 461 nodes · 1135 edges · 16 communities (12 shown, 4 thin omitted)
+- 477 nodes · 1180 edges · 16 communities (12 shown, 4 thin omitted)
 - Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 43 edges (avg confidence: 0.86)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `5187030f`
+- Built from commit: `960c989f`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -36,8 +36,8 @@
 ## God Nodes (most connected - your core abstractions)
 1. `route()` - 26 edges
 2. `computeProfile()` - 21 edges
-3. `fromISO()` - 19 edges
-4. `esc()` - 18 edges
+3. `esc()` - 20 edges
+4. `fromISO()` - 19 edges
 5. `viewToday()` - 18 edges
 6. `R()` - 17 edges
 7. `derive()` - 16 edges
@@ -48,13 +48,13 @@
 ## Surprising Connections (you probably didn't know these)
 - `Ritmo – note per l'assistente` --references--> `parseGymList()`  [INFERRED]
   CLAUDE.md → js/gymreview.js
+- `Ritmo – note per l'assistente` --references--> `reviewGym()`  [INFERRED]
+  CLAUDE.md → js/gymreview.js
+- `Ritmo – note per l'assistente` --references--> `coachSummary()`  [INFERRED]
+  CLAUDE.md → js/engine.js
 - `Ritmo – note per l'assistente` --references--> `derive()`  [INFERRED]
   CLAUDE.md → js/engine.js
-- `Ritmo – note per l'assistente` --references--> `mixedSchedule()`  [INFERRED]
-  CLAUDE.md → js/engine.js
-- `Ritmo – note per l'assistente` --references--> `weekSchedule()`  [INFERRED]
-  CLAUDE.md → js/engine.js
-- `Ritmo – note per l'assistente` --references--> `nutrition()`  [INFERRED]
+- `Ritmo – note per l'assistente` --references--> `generatePlan()`  [INFERRED]
   CLAUDE.md → js/engine.js
 
 ## Import Cycles
@@ -69,19 +69,19 @@
 
 ### Community 0 - "UI app e router"
 Cohesion: 0.06
-Nodes (96): aiKey(), $app, applyAction(), assessCard(), beginAssessment(), bindGym(), bindWizardInputs(), BLOCK_LABELS (+88 more)
+Nodes (103): aiKey(), analyzeStory(), $app, applyAction(), assessCard(), beginAssessment(), bindStory(), bindWizardInputs() (+95 more)
 
 ### Community 1 - "Motore del piano"
-Cohesion: 0.06
-Nodes (77): Ritmo – note per l'assistente, DIET_LABEL, dietNotes(), F, MEAL_LABEL, MEAL_SHARE, mealPlan(), MENUS (+69 more)
+Cohesion: 0.05
+Nodes (80): Ritmo – note per l'assistente, AREAS, LEVEL_LABEL, PAIN_REGIONS, DIET_LABEL, dietNotes(), F, MEAL_LABEL (+72 more)
 
 ### Community 2 - "UI test e player guidato"
 Cohesion: 0.10
 Nodes (54): AREA_LABEL, cancelAssessment(), disposeViewer(), doneScreen(), esc(), finishStopwatch(), fmtMin(), fmtS() (+46 more)
 
 ### Community 3 - "Valutazione e KPI"
-Cohesion: 0.09
-Nodes (33): ageBand(), AREAS, BF_LABEL, bfLevel(), bodyFat(), buildKpis(), CHAIR_MID, clamp() (+25 more)
+Cohesion: 0.10
+Nodes (33): ageBand(), BF_LABEL, bfLevel(), bodyFat(), buildKpis(), CHAIR_MID, clamp(), computeProfile() (+25 more)
 
 ### Community 4 - "Visualizzatore 3D"
 Cohesion: 0.08
@@ -92,16 +92,16 @@ Cohesion: 0.07
 Nodes (29): concurrency, cancel-in-progress, group, environment, needs, runs-on, steps, name (+21 more)
 
 ### Community 6 - "narrative.js"
-Cohesion: 0.08
-Nodes (35): analyzeStory(), bindStory(), draftFromStory(), qchips(), storySave(), storyText(), toggleDictation(), updateStoryCoverage() (+27 more)
+Cohesion: 0.07
+Nodes (41): bindGym(), gymAnalysisHTML(), gymApply(), gymChosenHTML(), gymPickerHTML(), gymReview(), planCtx(), viewGym() (+33 more)
 
 ### Community 7 - "Guided 3D Physical Tests"
-Cohesion: 0.15
-Nodes (13): 4-week Progression Cycles, Guided 3D Physical Tests, Karvonen Heart Rate Zones, Katch-McArdle Metabolism, Measurable KPI Milestones, Mifflin-St Jeor Calorie Estimate, Pain Map (8 body zones), Plan Precision Index (+5 more)
+Cohesion: 0.10
+Nodes (20): Pose Lab Dev Page, window.show(id, frac, muscles), #player Guided Workout Dialog, 3D Holographic Exercise Mannequin (Three.js), Adaptive Plan Feedback (easy/right/hard/pain), 4-week Progression Cycles, Guided 3D Physical Tests, Full-screen Guided Workout (+12 more)
 
 ### Community 8 - "Funzioni utente (README)"
-Cohesion: 0.09
-Nodes (23): Pose Lab Dev Page, window.show(id, frac, muscles), #player Guided Workout Dialog, BY_ID, EXERCISES, gait(), K(), MAP (+15 more)
+Cohesion: 0.12
+Nodes (16): BY_ID, EXERCISES, gait(), K(), MAP, mirror(), MOTION_MAP, MOTIONS (+8 more)
 
 ### Community 9 - "Configurazione npm"
 Cohesion: 0.22
@@ -117,23 +117,23 @@ Nodes (3): Animated Background FX (grid, orbs, scan), Shared SVG Gradients (ecgG
 
 ## Knowledge Gaps
 - **18 isolated node(s):** `Ritmo App Shell (index.html)`, `Diet-type Nutrition and Typical Day`, `Mixed Session Weeks`, `Animated Background FX (grid, orbs, scan)`, `Shared SVG Gradients (ecgGrad, ringGrad, areaGrad)` (+13 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 130 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 135 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **4 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `load3D()` connect `UI test e player guidato` to `UI app e router`, `Visualizzatore 3D`?**
-  _High betweenness centrality (0.077) - this node is a cross-community bridge._
+  _High betweenness centrality (0.076) - this node is a cross-community bridge._
 - **Are the 12 inferred relationships involving `route()` (e.g. with `viewGym()` and `viewLibrary()`) actually correct?**
   _`route()` has 12 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `Ritmo App Shell (index.html)`, `Diet-type Nutrition and Typical Day`, `Mixed Session Weeks` to the rest of the system?**
   _18 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `UI app e router` be split into smaller, more focused modules?**
-  _Cohesion score 0.06227645697454239 - nodes in this community are weakly interconnected._
-- **Why does `createViewer()` connect `Visualizzatore 3D` to `Funzioni utente (README)`?**
-  _High betweenness centrality (0.074) - this node is a cross-community bridge._
+  _Cohesion score 0.05695970695970696 - nodes in this community are weakly interconnected._
+- **Why does `createViewer()` connect `Visualizzatore 3D` to `Guided 3D Physical Tests`?**
+  _High betweenness centrality (0.072) - this node is a cross-community bridge._
 - **Should `Motore del piano` be split into smaller, more focused modules?**
-  _Cohesion score 0.05570611261668172 - nodes in this community are weakly interconnected._
-- **Why does `3D Holographic Exercise Mannequin (Three.js)` connect `Funzioni utente (README)` to `Guided 3D Physical Tests`?**
-  _High betweenness centrality (0.063) - this node is a cross-community bridge._
+  _Cohesion score 0.05266106442577031 - nodes in this community are weakly interconnected._
+- **Should `UI test e player guidato` be split into smaller, more focused modules?**
+  _Cohesion score 0.09548022598870057 - nodes in this community are weakly interconnected._
