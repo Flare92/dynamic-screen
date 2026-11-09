@@ -80,6 +80,77 @@ export function parseGymList(text) {
   return out.filter((x) => { const k = x.key || x.raw; if (seen.has(k)) return false; seen.add(k); return true; });
 }
 
+// ------------------------------------------------------------------
+// Scelta dalla lista (senza scrivere): modifica il testo della scheda riga per riga,
+// così il testo resta l'unica fonte e l'analisi non cambia.
+// ------------------------------------------------------------------
+
+export const GYM_GROUPS = [
+  { id: 'gambe', label: 'Gambe e glutei', pats: ['squat', 'lunge', 'hinge', 'glutei', 'calf'] },
+  { id: 'petto', label: 'Petto', pats: ['push_h'] },
+  { id: 'schiena', label: 'Schiena', pats: ['pull_h', 'pull_v'] },
+  { id: 'spalle', label: 'Spalle', pats: ['push_v'] },
+  { id: 'braccia', label: 'Braccia', pats: ['braccia'] },
+  { id: 'core', label: 'Addominali e core', pats: ['core'] },
+  { id: 'cardio', label: 'Cardio e macchine aerobiche', pats: ['cardio'] },
+];
+
+// nome mostrato e scritto nella scheda: deve essere riconosciuto di nuovo come lo stesso esercizio
+const PICK_LABEL = { 'Esercizi per i tricipiti': 'Tricipiti ai cavi (push down)', 'Curl per i bicipiti': 'Curl bicipiti', 'Step-up': 'Step up', 'Alzate posteriori': 'Rear delt machine (alzate posteriori)' };
+
+/** voci selezionabili, una per esercizio del catalogo, raggruppate per zona */
+export function pickerGroups() {
+  const seen = new Set();
+  const entries = CATALOG.filter((c) => !seen.has(c.name) && seen.add(c.name));
+  return GYM_GROUPS.map((g) => ({
+    ...g,
+    items: entries.filter((c) => g.pats.includes(c.pat)).map((c) => ({ key: c.name, label: PICK_LABEL[c.name] || c.name, cardio: c.pat === 'cardio' })),
+  })).filter((g) => g.items.length);
+}
+
+// kg col punto: la virgola separa gli esercizi
+const itemLine = (x) => `${x.raw}${x.sets ? ` ${x.sets}x${x.reps}` : ''}${x.kg ? ` ${x.kg} kg` : ''}`;
+const linesOf = (text) => String(text || '').split('\n');
+
+/** esercizi del catalogo già nella scheda, con serie, ripetizioni e kg */
+export function pickedFromText(text) {
+  const out = {};
+  for (const x of parseGymList(text)) if (x.key && !out[x.key]) out[x.key] = { sets: x.sets, reps: x.reps, kg: x.kg };
+  return out;
+}
+
+// riscrive la riga che contiene l'esercizio `key`; fn(item) → item aggiornato o null per toglierlo
+function editLine(text, key, fn) {
+  const lines = linesOf(text);
+  for (let i = 0; i < lines.length; i++) {
+    const items = parseGymList(lines[i]);
+    const j = items.findIndex((x) => x.key === key);
+    if (j < 0) continue;
+    // riga con un solo esercizio: il nome resta come l'ha scritto l'utente (maiuscole comprese)
+    const orig = lines[i].replace(/\s*\d+\s*(x|×|serie.*|per)\s*\d+.*$|\s*\d+(?:[.,]\d+)?\s*(kg|chili).*$/gi, '').trim();
+    const next = fn(items.length === 1 && orig ? { ...items[j], raw: orig } : items[j]);
+    if (items.length === 1) { if (next) lines[i] = itemLine(next); else lines.splice(i, 1); }
+    else { if (next) items[j] = next; else items.splice(j, 1); lines[i] = items.map(itemLine).join(', '); }
+    return lines.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\s*\n/, '');
+  }
+  return null;
+}
+
+const append = (text, line) => (String(text || '').trim() ? `${String(text).replace(/\s+$/, '')}\n${line}` : line);
+
+/** aggiunge l'esercizio se manca, lo toglie se c'è */
+export function togglePick(text, key, label = PICK_LABEL[key] || key) {
+  const removed = editLine(text, key, () => null);
+  return removed !== null ? removed : append(text, label);
+}
+
+/** imposta serie×ripetizioni e kg di un esercizio (lo aggiunge se manca) */
+export function setPickDetail(text, key, { sets, reps, kg }, label = PICK_LABEL[key] || key) {
+  const upd = (x) => ({ ...x, sets: sets || null, reps: sets ? reps : null, kg: kg || null });
+  const done = editLine(text, key, upd);
+  return done !== null ? done : append(text, itemLine(upd({ raw: label })));
+}
+
 /** frasi del racconto che elencano esercizi di palestra */
 export function gymFromNarrative(text) {
   const t = String(text || '').toLowerCase();

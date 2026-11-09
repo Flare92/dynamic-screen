@@ -597,3 +597,22 @@ details.day .day-body { padding: 0 16px 14px; }
 .gym-item.v-cambia, .gym-item.v-togli { border-left-color: var(--hot); }
 .gym-item .link { font: inherit; color: inherit; text-decoration: underline; text-decoration-color: var(--cyan); text-underline-offset: 3px; text-align: left; }
 #gym-text { min-height: 200px; }
+
+/* Scelta degli esercizi dalla lista */
+.gym-group { margin-top: 14px; }
+.gym-group .chips { margin-top: 6px; }
+.gym-group .chips button { padding: 9px 13px; min-height: 42px; font-size: 14px; }
+.gym-chosen { display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; align-items: center; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--glass); border-left: 3px solid var(--volt); }
+.gym-chosen b { min-width: 0; overflow-wrap: anywhere; }
+.gym-chosen select { width: auto; padding: 8px 10px; font-size: 14px; min-height: 40px; }
+.gym-kg { display: flex; align-items: center; gap: 4px; }
+.gym-kg input { width: 64px; padding: 8px; font-size: 14px; min-height: 40px; text-align: right; }
+.gym-kg span { font-size: 13px; color: var(--ink-3); }
+.gym-chosen .gym-x { width: 36px; height: 36px; font-size: 14px; justify-self: end; }
+@media (max-width: 420px) {
+  .gym-chosen { grid-template-columns: 1fr auto; }
+  .gym-chosen b { grid-column: 1; }
+  .gym-chosen .gym-x { grid-column: 2; grid-row: 1; justify-self: end; }
+  .gym-chosen select { grid-column: 1; justify-self: start; }
+  .gym-kg { grid-column: 2; justify-self: end; }
+}
