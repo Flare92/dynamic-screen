@@ -189,9 +189,19 @@ export function allowedExercises(p, ctx = {}) {
 function pickPattern(pat, d, variant, used, preferLoad) {
   const list = EXERCISES.filter((e) => e.cat === 'strength' && e.pat === pat && allowed(e, d) && !used.has(e.id));
   if (!list.length) return null;
-  const score = (e) => e.lvl * 2 + (e.eq.includes('corpo') ? 0 : preferLoad ? 1.5 : 0.5) + (d.prefer?.[e.id] || 0) - (d.equip.has('palestra') && HOME_ONLY.includes(e.id) ? 4 : 0);
+  const inGym = d.equip.has('palestra');
+  // in palestra: macchine, bilancieri e manubri prima di elastici e corpo libero
+  const gymScore = (e) => {
+    if (!inGym) return 0;
+    if (HOME_ONLY.includes(e.id)) return -6;
+    if (e.eq.includes('palestra') || e.eq.includes('manubri') || e.eq.includes('sbarra')) return 4;
+    if (e.eq.includes('elastici')) return -3;
+    return ['core', 'calf', 'glutei'].includes(pat) ? 0 : -2;
+  };
+  const score = (e) => e.lvl * 2 + (e.eq.includes('corpo') ? 0 : preferLoad ? 1.5 : 0.5) + (d.prefer?.[e.id] || 0) + gymScore(e);
   list.sort((a, b) => score(b) - score(a));
-  const top = list.slice(0, Math.min(3, list.length));
+  const pool = inGym && list.some((e) => gymScore(e) >= 0) ? list.filter((e) => gymScore(e) >= 0) : list;
+  const top = pool.slice(0, Math.min(3, pool.length));
   let e = top[variant % top.length];
   // sostituzione scelta dall'utente
   const sw = d.swaps?.[e.id];

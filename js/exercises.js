@@ -54,7 +54,7 @@ export const EXERCISES = [
   E('h_ponte1', 'Ponte glutei a una gamba', 'strength', { pat: 'hinge', lvl: 2, tags: ['supino'], how: 'Come il ponte, ma con una gamba tesa in aria. Bacino a livello.' }),
   E('h_hipthrust', 'Hip thrust con manubrio', 'strength', { pat: 'hinge', eq: ['manubri'], lvl: 2, tags: ['supino'], how: 'Scapole sul divano/panca, manubrio sul bacino: spingi in alto fino ad allineare busto e cosce.' }),
   E('h_rdl_el', 'Stacco rumeno con elastico', 'strength', { pat: 'hinge', eq: ['elastici'], contra: ['schiena'], how: 'Elastico sotto i piedi, ginocchia morbide, porta il bacino indietro con schiena piatta.' }),
-  E('h_rdl', 'Stacco rumeno con manubri', 'strength', { pat: 'hinge', eq: ['manubri'], lvl: 2, contra: ['schiena'], how: 'Manubri lungo le cosce, scendi fino a metà tibia sentendo i femorali, schiena neutra.' }),
+  E('h_rdl', 'Stacco rumeno con manubri', 'strength', { pat: 'hinge', eq: ['manubri'], contra: ['schiena'], how: 'Manubri lungo le cosce, scendi fino a metà tibia sentendo i femorali, schiena neutra.' }),
   E('h_superman', 'Superman a terra', 'strength', { pat: 'hinge', contra: ['schiena'], tags: ['prono'], how: 'Prono, solleva insieme braccia e gambe di pochi centimetri, sguardo a terra.' }),
   E('h_stacco', 'Stacco da terra con bilanciere', 'strength', { pat: 'hinge', eq: ['palestra'], lvl: 3, contra: ['schiena'], tags: ['valsalva'], how: 'Bilanciere vicino agli stinchi, spingi il pavimento, schiena neutra dall’inizio alla fine.' }),
 
