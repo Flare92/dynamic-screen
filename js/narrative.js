@@ -4,12 +4,15 @@
 export const QUESTIONS = [
   { id: 'chi', label: 'Chi sei', hint: 'Età, sesso, altezza, peso.', keys: ['eta', 'sesso', 'altezza', 'peso'] },
   { id: 'allenamento', label: 'Come ti alleni oggi', hint: 'Dove, quante volte a settimana, quanto dura.', keys: ['sessioni'] },
+  { id: 'scheda', label: 'I tuoi esercizi in palestra', hint: 'Se vai in palestra: cosa fai di solito, con serie e carichi.', keys: ['scheda'], optional: true },
   { id: 'tempo', label: 'Quanto tempo vuoi dedicarci', hint: 'Giorni e minuti in più, a casa o fuori, attrezzi.', keys: ['sessioni'] },
   { id: 'giornata', label: 'La tua giornata', hint: 'Lavoro, passi, sonno, stress.', keys: ['lavoro'] },
   { id: 'cibo', label: 'Come mangi', hint: 'Tipo di alimentazione, cosa escludi.', keys: ['dieta'] },
   { id: 'salute', label: 'Salute e dolori', hint: 'Problemi, infortuni, dolori, farmaci.', keys: ['salute'] },
   { id: 'obiettivo', label: 'Cosa vuoi ottenere', hint: 'Obiettivo, peso desiderato, entro quando.', keys: ['obiettivo'] },
 ];
+
+import { gymFromNarrative } from './gymreview.js';
 
 export const DIETS = [
   { id: 'onnivora', label: 'Onnivora' },
@@ -20,7 +23,7 @@ export const DIETS = [
   { id: 'vegana', label: 'Vegana' },
 ];
 
-export const EXAMPLE = 'Ho 34 anni, sono alto 180 cm e peso 88 kg. Mi alleno 2 volte a settimana in palestra, allenamento da 1 ora a volta. Poi vorrei incrementare facendo 15-20 minuti di allenamento almeno altri 3-4 giorni a settimana da casa, dove ho dei manubri. Il resto della giornata sono sedentario perché lavoro seduto al pc, dormo circa 6 ore. Ho un’alimentazione prettamente vegetale tranne yogurt e alcuni formaggi. Ogni tanto ho un leggero mal di schiena. Vorrei perdere la pancia e arrivare a 80 kg entro l’estate.';
+export const EXAMPLE = 'Ho 34 anni, sono alto 180 cm e peso 88 kg. Mi alleno 2 volte a settimana in palestra, allenamento da 1 ora a volta: in palestra faccio panca piana 4x8 con 50 kg, lat machine, leg press, alzate laterali, curl per i bicipiti e crunch. Poi vorrei incrementare facendo 15-20 minuti di allenamento almeno altri 3-4 giorni a settimana da casa, dove ho dei manubri. Il resto della giornata sono sedentario perché lavoro seduto al pc, dormo circa 6 ore. Ho un’alimentazione prettamente vegetale tranne yogurt e alcuni formaggi. Ogni tanto ho un leggero mal di schiena. Vorrei perdere la pancia e arrivare a 80 kg entro l’estate.';
 
 // ------------------------------------------------------------------
 // Utilità
@@ -240,9 +243,15 @@ export function parseNarrative(raw, now = new Date()) {
     p.dataObiettivo = iso(dt); mark('obiettivo', m[0]);
   }
 
+  // --- esercizi che fa già in palestra
+  const gym = gymFromNarrative(raw);
+  if (gym.length) { p.schedaPalestra = gym.map(gymLine).join('\n'); mark('scheda', gym.map((x) => x.key).join(', ')); }
+
   if (!Object.keys(p.misure).length) delete p.misure;
   return { profile: p, sessioni, found, evidence };
 }
+
+const gymLine = (x) => `${x.raw}${x.sets ? ` ${x.sets}x${x.reps}` : ''}${x.kg ? ` ${x.kg} kg` : ''}`;
 
 // Cosa manca per generare il piano
 export const REQUIRED = [
@@ -299,10 +308,11 @@ const SCHEMA = {
         required: ['giorni', 'minuti', 'luogo'],
       },
     },
+    eserciziPalestra: { type: 'array', items: { type: 'string' }, description: 'Esercizi che la persona dice di fare già in palestra, uno per voce, con serie×ripetizioni e kg se indicati (es. "Panca piana 4x8 60 kg"). Vuoto se non ne parla.' },
     sintesi: { type: 'string', description: 'Sintesi in italiano, 2-3 frasi, della situazione della persona' },
     noteCoach: { type: 'array', items: { type: 'string' }, description: 'Punti di attenzione per costruire il piano, in italiano' },
   },
-  required: ['nome', 'sesso', 'eta', 'altezza', 'peso', 'pesoObiettivo', 'dataObiettivo', 'obiettivo', 'traguardo', 'esperienza', 'lavoro', 'passi', 'sonno', 'fumo', 'alcol', 'stress', 'alimentazione', 'dieta', 'condizioni', 'dolori', 'attrezziCasa', 'sessioni', 'sintesi', 'noteCoach'],
+  required: ['nome', 'sesso', 'eta', 'altezza', 'peso', 'pesoObiettivo', 'dataObiettivo', 'obiettivo', 'traguardo', 'esperienza', 'lavoro', 'passi', 'sonno', 'fumo', 'alcol', 'stress', 'alimentazione', 'dieta', 'condizioni', 'dolori', 'attrezziCasa', 'sessioni', 'eserciziPalestra', 'sintesi', 'noteCoach'],
 };
 
 const SYSTEM = `Sei un preparatore atletico che legge la relazione iniziale scritta da un cliente in italiano e ne estrae i dati per costruire il suo piano di allenamento.
@@ -344,5 +354,6 @@ export function mergeAI(local, ai) {
   }
   const sessioni = ai.sessioni?.length ? ai.sessioni.map((s) => ({ ...s, giorni: Math.min(7, Math.max(1, s.giorni)), minuti: Math.min(180, Math.max(10, s.minuti)) })) : local.sessioni;
   if (ai.sessioni?.length) found.sessioni = true;
+  if (ai.eserciziPalestra?.length) { p.schedaPalestra = ai.eserciziPalestra.join('\n'); found.scheda = true; }
   return { profile: p, sessioni, found, evidence: local.evidence, sintesi: ai.sintesi, noteCoach: ai.noteCoach || [], ai: true };
 }

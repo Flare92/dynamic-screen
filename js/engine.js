@@ -157,6 +157,7 @@ export function derive(p, ctx = {}) {
   if (flags.hamstringsTight) { bump(['h_ponte', 'h_hipthrust', 'h_ponte1'], 1.5); bump(['h_stacco', 'h_rdl'], -1.5); }
   if (flags.coreWeak || sensitive.has('schiena') || cond.has('schiena')) { bump(['c_birddog', 'c_deadbug', 'c_curlup', 'c_pallof'], 1.5); bump(['c_hollow', 'c_crunch'], -2); }
   if (cond.has('ginocchia') || sensitive.has('ginocchia')) bump(['s_sitstand', 'l_step', 'g_abd_el', 'g_clam', 'h_ponte'], 1);
+  if (ctx.favorites?.length) bump(ctx.favorites, 6);
 
   const hiitOk = !['cuore', 'petto', 'ipertensione', 'gravidanza', 'intervento'].some((c) => cond.has(c)) && bmi < 35 && p.eta < 70;
   const hrMax = Math.round(208 - 0.7 * p.eta);
@@ -166,7 +167,7 @@ export function derive(p, ctx = {}) {
     bmi, cond, sensitive, pains, equip, level, pl, safety, blocked, hiitOk, hrMax, steps, age: p.eta,
     cp, flags, exclude, prefer, hrRest: cp?.body?.hrRest || null, cardioL: lv.cardio ?? null,
     maxes: cp?.maxes || {}, weakAreas: (cp?.weak || []).map((a) => a.id),
-    swaps: ctx.swaps || {}, exAdj: ctx.exAdj || {},
+    swaps: ctx.swaps || {}, exAdj: ctx.exAdj || {}, favorites: ctx.favorites || [],
   };
 }
 
@@ -216,6 +217,28 @@ function pickPattern(pat, d, variant, used, preferLoad) {
     if (lo) e = lo;
   }
   return e;
+}
+
+/** perché un esercizio è o non è adatto all'utente (in palestra) */
+export function checkExercise(id, p, ctx = {}) {
+  const ex = BY_ID[id];
+  if (!ex) return { ok: false, kind: 'sconosciuto', reason: '' };
+  const d = { ...derive(p, ctx), equip: new Set(['corpo', 'palestra', 'manubri', 'elastici', 'sbarra', 'tapis', 'bici']) };
+  const c = ex.contra.find((x) => d.cond.has(x));
+  if (c) return { ok: false, kind: 'salute', reason: `Sconsigliato con ${{ schiena: 'mal di schiena', ginocchia: 'problemi alle ginocchia', spalle: 'problemi alle spalle', anche: 'problemi alle anche', polsi: 'dolore ai polsi' }[c] || c}.` };
+  const t = ex.tags.find((x) => d.blocked.has(x));
+  if (t) return { ok: false, kind: 'salute', reason: { valsalva: 'Carichi massimali sconsigliati con la tua pressione o condizione cardiaca.', impatto: 'Esercizio ad alto impatto, sconsigliato per te.', supino: 'Sdraiati sulla schiena: da evitare in gravidanza.', prono: 'A pancia in giù: da evitare in gravidanza.', testaGiu: 'Testa in giù: sconsigliato con la pressione alta.', flessioneCarico: 'Flessione della schiena sotto carico: sconsigliata per te.' }[t] };
+  if (d.exclude.has(id)) return { ok: false, kind: 'salute', reason: 'Carica una zona in cui hai indicato dolore.' };
+  const cap = ex.pat ? d.pl[ex.pat] : d.level;
+  if (ex.lvl > cap + 1) return { ok: false, kind: 'livello', reason: 'Più avanzato del tuo livello attuale: cura la tecnica e i carichi, o inizia da una variante più semplice.' };
+  return { ok: true };
+}
+
+/** miglior esercizio da palestra per uno schema motorio */
+export function suggestForPattern(pat, p, ctx = {}, exclude = []) {
+  if (pat === 'cardio') return BY_ID.x_bici;
+  const d = { ...derive(p, ctx), equip: new Set(['corpo', 'palestra', 'manubri', 'elastici', 'sbarra', 'tapis', 'bici']) };
+  return pickPattern(pat, d, 0, new Set(exclude), p.obiettivo === 'massa' || p.obiettivo === 'tonificare');
 }
 
 /** alternative possibili per un esercizio (stesso schema motorio o categoria), adatte all'utente */
@@ -526,6 +549,7 @@ function strengthSession(type, minutes, p, d, variant, phase) {
         if (ds.basis) it.basis = ds.basis;
         if (d.exAdj?.[e.id]) it.tag = d.exAdj[e.id] > 0 ? 'Progressione' : 'Regressione';
         if (d.swaps && Object.values(d.swaps).includes(e.id)) it.tag = 'Scelto da te';
+        else if (d.favorites?.includes(e.id) && d.equip.has('palestra')) it.tag = 'Dalla tua scheda';
         return it;
       }),
     };
@@ -930,7 +954,7 @@ function generatePlanBase(p, opts = {}) {
   const startISO = opts.startISO || toISO(new Date());
   const week = opts.week || 1;
   const cp = computeProfile(p, opts.assess || {});
-  const ctx = { cp, swaps: opts.swaps, excluded: opts.excluded, exAdj: opts.exAdj };
+  const ctx = { cp, swaps: opts.swaps, excluded: opts.excluded, exAdj: opts.exAdj, favorites: opts.favorites };
   const d = derive(p, ctx);
   const nutri = nutrition(p, { ...opts, ctx });
   return {
