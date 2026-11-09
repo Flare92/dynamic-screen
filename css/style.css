@@ -585,3 +585,15 @@ details.day .day-body { padding: 0 16px 14px; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
   .reveal { opacity: 1; transform: none; }
 }
+
+/* La tua scheda di palestra */
+.gym-cta { display: flex; gap: 14px; align-items: center; text-decoration: none; color: inherit; }
+.gym-cta .ti { font-size: 26px; }
+.gym-list { display: grid; gap: 10px; margin-top: 12px; }
+.gym-item { padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--glass); border-left: 3px solid var(--line); }
+.gym-item.v-tieni, .gym-item.v-add { border-left-color: var(--volt); }
+.gym-item.v-cautela { border-left-color: var(--cyan); }
+.gym-item.v-riduci { border-left-color: var(--violet); }
+.gym-item.v-cambia, .gym-item.v-togli { border-left-color: var(--hot); }
+.gym-item .link { font: inherit; color: inherit; text-decoration: underline; text-decoration-color: var(--cyan); text-underline-offset: 3px; text-align: left; }
+#gym-text { min-height: 200px; }

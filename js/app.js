@@ -14,6 +14,7 @@ import {
 } from './assessment.js';
 import { QUESTIONS, EXAMPLE, DIETS, parseNarrative, coverage, analyzeWithClaude, mergeAI } from './narrative.js';
 import { DIET_LABEL } from './diet.js';
+import { parseGymList, reviewGym, VERDICT_LABEL, VERDICT_COUNT } from './gymreview.js';
 import { startAssessment, renderAssessment, mountAssessment, handleAssessmentClick, assessmentActive, cancelAssessment } from './assess-ui.js';
 
 // ==================================================================
@@ -57,13 +58,20 @@ function mergedAssess(upTo = state.assess.length) {
   return out;
 }
 const latestWeight = () => ([...state.weights].sort((a, b) => a.date.localeCompare(b.date)).pop()?.kg ?? state.profile.peso);
+const hasGym = (p = state.profile) => !!p && ((p.sessioni || []).some((x) => x.luogo === 'palestra') || (p.attrezzi || []).includes('palestra'));
+const planCtx = () => ({ cp: computeProfile(state.profile, mergedAssess()), swaps: state.swaps, excluded: state.excluded, exAdj: state.exAdj });
+// esercizi della scheda personale da tenere: il piano li preferisce nelle sessioni in palestra
+function gymReview(text = state.profile?.schedaPalestra) {
+  const list = parseGymList(text);
+  return list.length ? reviewGym(state.profile, list, planCtx()) : null;
+}
 function getPlan(week = currentWeek()) {
   return generatePlan(state.profile, {
     startISO: state.planStart, week, calorieAdjust: state.calorieAdjust,
     assess: mergedAssess(), swaps: state.swaps, excluded: state.excluded, exAdj: state.exAdj,
+    favorites: hasGym() ? gymReview()?.keep : undefined,
   });
 }
-const planCtx = () => ({ cp: computeProfile(state.profile, mergedAssess()), swaps: state.swaps, excluded: state.excluded, exAdj: state.exAdj });
 const precisionNow = () => precision(state.profile, mergedAssess(), { feedbacks: state.fbCount || 0, retests: Math.max(0, state.assess.length - 1), excludeTests: Object.values(TEST_BY_ID).filter((t) => t.when(state.profile, mergedAssess().results)).map((t) => t.id) });
 const daysSinceAssess = () => (state.assess.length ? daysBetween(fromISO(state.assess[state.assess.length - 1].date), new Date()) : null);
 function dayLog(iso) {
@@ -87,7 +95,7 @@ function route() {
   if (!state.profile && !['setup', 'benvenuto', 'racconto', 'capito'].includes(hash)) { location.replace('#/benvenuto'); }
   if (hash === 'capito' && !draft) { location.replace('#/racconto'); return; }
   const page = state.profile ? (hash === 'benvenuto' ? 'oggi' : hash) : (['setup', 'racconto', 'capito'].includes(hash) ? hash : 'benvenuto');
-  const withTabs = !['setup', 'benvenuto', 'valutazione', 'racconto', 'capito'].includes(page);
+  const withTabs = !['setup', 'benvenuto', 'valutazione', 'racconto', 'capito', 'palestra'].includes(page);
   if (page !== 'valutazione' && assessmentActive()) cancelAssessment();
   if (page === 'valutazione' && !assessmentActive()) beginAssessment();
   $tabbar.hidden = !withTabs;
@@ -96,12 +104,13 @@ function route() {
 
   if (page !== 'benvenuto') disposeHero();
   if (page === 'setup' && !draft) initDraft(!!state.profile);
-  const views = { benvenuto: viewWelcome, setup: viewWizard, oggi: viewToday, piano: viewPlan, esercizi: viewLibrary, progressi: viewProgress, profilo: viewProfile, valutazione: renderAssessment, partenza: viewStart, racconto: viewStory, capito: viewReview };
+  const views = { benvenuto: viewWelcome, setup: viewWizard, oggi: viewToday, piano: viewPlan, esercizi: viewLibrary, progressi: viewProgress, profilo: viewProfile, valutazione: renderAssessment, partenza: viewStart, racconto: viewStory, capito: viewReview, palestra: viewGym };
   $app.innerHTML = (views[page] || viewToday)();
   if (page === 'setup') bindWizardInputs();
   if (page === 'valutazione') mountAssessment();
   if (page === 'racconto') bindStory();
   if (page === 'capito') bindWizardInputs();
+  if (page === 'palestra') bindGym();
   if (page === 'benvenuto') mountHero();
   countUp($app);
 }
@@ -213,7 +222,7 @@ function viewStory() {
   </section>`;
 }
 const wordCount = (t) => (t.trim() ? t.trim().split(/\s+/).length : 0);
-const qchips = (cov) => cov.map((q) => `<span class="qchip ${q.ok ? 'ok' : ''}"><i>${q.ok ? '✓' : '○'}</i><span><b>${q.label}</b><small>${q.hint}</small></span></span>`).join('');
+const qchips = (cov) => cov.map((q) => `<span class="qchip ${q.ok ? 'ok' : ''}"><i>${q.ok ? '✓' : '○'}</i><span><b>${q.label}${q.optional ? ' <em class="small muted">facoltativa</em>' : ''}</b><small>${q.hint}</small></span></span>`).join('');
 
 let storyTimer = null;
 function updateStoryCoverage() {
@@ -316,6 +325,11 @@ function viewReview() {
       <div style="margin-top:12px">${slotEditor(d)}</div>
       <div class="field" style="margin-top:12px"><span>Attrezzi a casa</span>${chips('attrezzi', EQUIPMENT.filter((e) => e.id !== 'palestra'), d.attrezzi)}</div>
     </section>
+
+    ${d.sessioni?.some((x) => x.luogo === 'palestra') ? `<section class="card ${R(5)}"><div class="row between"><h3>I tuoi esercizi in palestra</h3>${d.schedaPalestra?.trim() ? (r.found.scheda ? '<span class="found">✓ dal testo</span>' : '<span class="found">✓</span>') : '<span class="assumed">facoltativo</span>'}</div>
+      <p class="small muted" style="margin-top:6px">Scrivi cosa fai di solito, uno per riga: dopo ti dico cosa tenere, cambiare o aggiungere.</p>
+      <textarea name="schedaPalestra" style="margin-top:10px" placeholder="${esc(GYM_PLACEHOLDER)}">${esc(d.schedaPalestra || '')}</textarea>
+    </section>` : ''}
 
     <section class="card ${R(5)}"><div class="row between"><h3>Alimentazione</h3>${ok('dieta')}</div>
       <div style="margin-top:12px">${seg('dieta', DIETS.map((x) => [x.id, x.label]), d.dieta)}</div>
@@ -608,6 +622,7 @@ function viewToday() {
     ${isToday ? assessCard() : ''}
     ${session ? sessionCard(session, iso, lg, moved) : restCard(plan, iso, lg)}
     ${isToday ? habitsCard(plan, iso) : ''}
+    ${isToday && !state.profile.schedaPalestra?.trim() ? gymCard(R(5)) : ''}
     ${isToday && needWeigh ? `
       <div class="card ${R(6)}">
         <div class="row between"><h3>Check-in settimanale</h3><span class="mono small muted">${lastW ? fmt(lastW.kg, 1) + ' KG' : ''}</span></div>
@@ -783,6 +798,8 @@ function viewPlan() {
   ${plan.summary?.length ? `<div class="section-title"><h2>Il tuo piano in breve</h2></div>
   <section class="card">${plan.summary.map((f) => `<div class="tip"><span class="ti">${f.icon}</span><div><b>${esc(f.title)}</b><p class="small muted" style="margin-top:2px">${esc(f.text)}</p></div></div>`).join('')}</section>` : ''}
 
+  ${hasGym() ? `<div class="section-title"><h2>La tua palestra</h2></div>${gymCard()}` : ''}
+
   <div class="section-title"><h2>La settimana</h2><span class="chip cyan">${plan.phase.label}</span></div>
   <p class="small muted" style="margin:0 2px 12px">${esc(plan.phase.note)}</p>
   ${plan.schedule.map((d, i) => d.session ? `
@@ -791,7 +808,7 @@ function viewPlan() {
       <div class="day-body">${d.session.blocks.map((b) => `
         <div class="block"><div class="block-head"><h3>${b.name}</h3><span class="mono small muted">${b.minutes}′</span></div>
         ${b.note ? `<p class="block-note">${esc(b.note)}</p>` : ''}
-        ${b.items.map((it) => `<div class="ex"><div class="ex-body" data-action="open-ex" data-id="${it.id}" data-dose="${esc(it.dose)}"><div class="ex-name">${esc(it.name)}</div><div class="ex-dose">${esc(it.dose)}</div></div><div class="ex-tools"><button class="icon-btn three" data-action="open-ex" data-id="${it.id}" data-dose="${esc(it.dose)}" aria-label="3D">${ICON.cube}</button></div></div>`).join('')}</div>`).join('')}
+        ${b.items.map((it) => `<div class="ex"><div class="ex-body" data-action="open-ex" data-id="${it.id}" data-dose="${esc(it.dose)}"><div class="ex-name">${esc(it.name)}</div><div class="ex-dose">${esc(it.dose)}</div>${it.tag ? `<span class="tag">${esc(it.tag)}</span>` : ''}</div><div class="ex-tools"><button class="icon-btn three" data-action="open-ex" data-id="${it.id}" data-dose="${esc(it.dose)}" aria-label="3D">${ICON.cube}</button></div></div>`).join('')}</div>`).join('')}
       </div>
     </details>` : `<div class="day-rest ${R(i)}"><span class="day-label">${d.label}</span><span>Riposo attivo · camminata</span></div>`).join('')}
 
@@ -1025,6 +1042,70 @@ function bmiLabel(b) {
 }
 
 // ==================================================================
+// La tua scheda di palestra: cosa tenere, cambiare, togliere, aggiungere
+// ==================================================================
+
+const GYM_PLACEHOLDER = 'Un esercizio per riga, anche con serie e carichi:\nPanca piana 4x8 60 kg\nLat machine 3x10\nLeg press\nCurl bicipiti\nCrunch';
+const VERDICT_CLASS = { tieni: 'ok', cautela: 'cyan', cambia: 'hot', riduci: 'violet', togli: 'hot', sconosciuto: '' };
+
+function gymAnalysisHTML(text) {
+  const r = gymReview(text);
+  if (!r) return '<p class="small muted">Scrivi i tuoi esercizi: l’analisi compare qui mentre scrivi.</p>';
+  const ex = (id, name) => (id ? `<button type="button" class="link" data-action="open-ex" data-id="${id}">${esc(name)}</button>` : esc(name));
+  const counts = r.items.reduce((a, x) => { a[x.verdict] = (a[x.verdict] || 0) + 1; return a; }, {});
+  return `
+    <div class="row between"><b>Analisi della tua scheda</b><span class="chip ${r.coverage >= 80 ? 'volt' : r.coverage >= 50 ? 'cyan' : 'hot'}">Copertura ${r.coverage}%</span></div>
+    <p class="small muted" style="margin-top:6px">${Object.entries(counts).map(([k, n]) => `${n} ${VERDICT_COUNT[k]}`).join(' · ')}${r.add.length ? ` · ${r.add.length} da aggiungere` : ''}</p>
+    <div class="gym-list">${r.items.map((x) => `
+      <div class="gym-item v-${x.verdict}">
+        <div class="row between"><b>${x.entry?.id ? ex(x.entry.id, x.name) : esc(x.name)}</b><span class="chip ${VERDICT_CLASS[x.verdict]}">${VERDICT_LABEL[x.verdict]}</span></div>
+        ${x.sets || x.kg ? `<p class="mono small muted">${x.sets ? `${x.sets}×${x.reps}` : ''}${x.kg ? ` · ${fmt(x.kg, x.kg % 1 ? 1 : 0)} kg` : ''}</p>` : ''}
+        ${x.reason ? `<p class="small muted" style="margin-top:4px">${esc(x.reason)}</p>` : x.verdict === 'tieni' ? `<p class="small muted" style="margin-top:4px">Va bene per il tuo obiettivo${x.entry?.mus ? ` (${esc(x.entry.mus)})` : ''}.</p>` : ''}
+        ${x.alt ? `<p class="small" style="margin-top:6px">→ Al suo posto: ${ex(x.alt.id, x.alt.name)}</p>` : ''}
+      </div>`).join('')}
+    </div>
+    ${r.add.length ? `<h3 style="margin-top:18px">Da aggiungere</h3>
+      <div class="gym-list">${r.add.map((a) => `<div class="gym-item v-add"><div class="row between"><b>${ex(a.id, a.name)}</b><span class="chip volt">Aggiungi</span></div><p class="small muted" style="margin-top:4px">${esc(a.reason)}</p></div>`).join('')}</div>` : ''}
+    ${r.notes.length ? `<div class="stack" style="margin-top:14px">${r.notes.map((n) => `<div class="alert info"><span>ℹ︎</span><span>${esc(n)}</span></div>`).join('')}</div>` : ''}
+    <p class="small muted" style="margin-top:14px">Gli esercizi da tenere entrano nelle tue sessioni in palestra con l’etichetta “Dalla tua scheda”; quelli da cambiare vengono sostituiti dall’alternativa.</p>`;
+}
+
+function viewGym() {
+  const text = state.profile.schedaPalestra || '';
+  return `
+  <div class="wizard-top ${R(0)}">
+    <button class="icon-btn" onclick="history.back()" aria-label="Indietro">${ICON.prev}</button>
+    <div class="grow"></div><span class="chip cyan"><i></i>La tua scheda</span>
+  </div>
+  <section class="stack-lg">
+    <div class="${R(1)}"><h1>Cosa fai in palestra?</h1>
+      <p class="muted" style="margin-top:8px">Scrivi gli esercizi che fai di solito. Li confronto con il tuo obiettivo, la tua salute e i tuoi test: ti dico cosa tenere, cosa cambiare, cosa togliere e cosa manca.</p></div>
+    <div class="story-box ${R(2)}"><textarea id="gym-text" placeholder="${esc(GYM_PLACEHOLDER)}">${esc(text)}</textarea></div>
+    <section class="card ${R(3)}" id="gym-out">${gymAnalysisHTML(text)}</section>
+    <div class="wizard-actions"><button class="btn primary" data-action="gym-done">Aggiorna il mio piano</button></div>
+  </section>`;
+}
+let gymTimer = null;
+function bindGym() {
+  const el = document.getElementById('gym-text');
+  el.addEventListener('input', () => {
+    clearTimeout(gymTimer);
+    gymTimer = setTimeout(() => {
+      state.profile.schedaPalestra = el.value; save();
+      document.getElementById('gym-out').innerHTML = gymAnalysisHTML(el.value);
+    }, 300);
+  });
+}
+// riquadro di richiamo (Oggi, Piano)
+function gymCard(cls = '') {
+  if (!hasGym()) return '';
+  const r = gymReview();
+  if (!r) return `<a class="card glow gym-cta ${cls}" href="#/palestra"><span class="ti">🏋️</span><div><b>Che esercizi fai in palestra?</b><p class="small muted" style="margin-top:2px">Scrivili e ti dico quali tenere, cambiare o aggiungere.</p></div></a>`;
+  const change = r.items.filter((x) => ['cambia', 'togli', 'riduci'].includes(x.verdict)).length;
+  return `<a class="card gym-cta ${cls}" href="#/palestra"><span class="ti">🏋️</span><div><b>La tua scheda di palestra</b><p class="small muted" style="margin-top:2px">${r.keep.length} esercizi nel piano${change ? ` · ${change} da rivedere` : ''}${r.add.length ? ` · ${r.add.length} da aggiungere` : ''} · copertura ${r.coverage}%</p></div></a>`;
+}
+
+// ==================================================================
 // Libreria esercizi
 // ==================================================================
 
@@ -1211,6 +1292,8 @@ function viewProfile() {
     <p class="small muted" style="margin-top:6px">La chiave resta su questo dispositivo e non finisce nei backup. L’analisi usa il tuo account Anthropic.</p>
   </section>
 
+  ${hasGym() ? `<div class="section-title"><h2>La tua scheda di palestra</h2></div>${gymCard()}` : ''}
+
   <div class="section-title"><h2>I tuoi dati</h2></div>
   <section class="card stack ${R(3)}">
     <p class="small muted">Tutto è salvato solo su questo dispositivo. Esporta un backup per non perderlo o per spostarlo su un altro telefono.</p>
@@ -1363,6 +1446,7 @@ document.addEventListener('click', (e) => {
       break;
     }
     case 'pick-day': selectedDay = Number(t.dataset.day); showFeedback = false; rerender(); break;
+    case 'gym-done': clearTimeout(gymTimer); { const el = document.getElementById('gym-text'); if (el) { state.profile.schedaPalestra = el.value; save(); } } location.hash = '#/piano'; toast('Piano aggiornato con la tua scheda'); break;
     case 'open-ex': {
       const id = t.dataset.id;
       const o = { dose: t.dataset.dose };
