@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generatePlan } from '../js/engine.js';
-import { parseGymList, reviewGym, gymFromNarrative } from '../js/gymreview.js';
+import { parseGymList, reviewGym, gymFromNarrative, GYM_PICKS, lineIsPick } from '../js/gymreview.js';
 import { parseNarrative, EXAMPLE } from '../js/narrative.js';
 
 const base = {
@@ -51,4 +51,14 @@ test('relazione: gli esercizi di palestra vengono letti dal testo', () => {
   assert.ok(r.found.scheda);
   assert.match(r.profile.schedaPalestra, /panca piana 4x8 50 kg/);
   assert.match(r.profile.schedaPalestra, /lat machine/);
+});
+
+test('elenco da toccare: ogni esercizio e macchinario è riconosciuto', () => {
+  for (const g of GYM_PICKS) for (const it of g.items) {
+    const [x] = parseGymList(it.name);
+    assert.ok(x?.key, `${it.name} non riconosciuto`);
+    assert.ok(lineIsPick(`${it.name} 4x8 40 kg`, it.name));
+  }
+  const l = parseGymList('Curl con bilanciere\nHammer curl');
+  assert.equal(l.length, 2, 'due varianti dello stesso esercizio restano distinte');
 });
