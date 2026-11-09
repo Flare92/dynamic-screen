@@ -75,3 +75,22 @@ test('alimentazione vegetariana: proteine e giornata tipo', () => {
   assert.ok(dietNotes('vegana').some((n) => /B12/.test(n.title)));
   assert.equal(dietNotes('onnivora').length, 0);
 });
+
+test('in palestra si usano gli attrezzi della palestra, non quelli di casa', () => {
+  for (const obiettivo of ['dimagrire', 'tonificare', 'salute', 'resistenza']) {
+    for (const esperienza of ['principiante', 'intermedio']) {
+      const p = {
+        sesso: 'M', eta: 34, altezza: 180, peso: 85, condizioni: [], dolori: {}, fumo: 'no', alcol: 'mai', stress: 'medio', sonno: 7,
+        alimentazione: 'media', lavoro: 'sedentario', passi: '5000-7500', esperienza, obiettivo, attrezzi: ['palestra', 'elastici'],
+        sessioni: [{ giorni: 2, minuti: 60, luogo: 'palestra' }, { giorni: 3, minuti: 20, luogo: 'casa' }], giorni: 5, minuti: 36,
+      };
+      const plan = generatePlan(p, { startISO: '2026-11-09' });
+      for (const d of plan.schedule.filter((x) => x.session?.luogo === 'palestra' && x.session.kind === 'forza')) {
+        const main = d.session.blocks.find((b) => b.name === 'Parte principale').items.filter((i) => !/^c_|^k_|^g_/.test(i.id));
+        const gym = main.filter((i) => /p_floor|p_machine|p_panca|s_legpress|s_goblet|s_backsquat|h_rdl$|h_hipthrust|h_stacco|l_affman|r_man|r_pulley|r_bil|t_lat$|t_neg|t_trazioni|v_lento|v_alzate/.test(i.id));
+        assert.ok(gym.length >= Math.ceil(main.length * 0.6), `${obiettivo}/${esperienza}: ${main.map((i) => i.id).join(', ')}`);
+        assert.ok(!main.some((i) => /_el$|_el_|r_towel|r_tavolo|s_sitstand|p_muro/.test(i.id)), `${obiettivo}: attrezzi di casa in palestra`);
+      }
+    }
+  }
+});
