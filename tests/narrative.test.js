@@ -1,3 +1,4 @@
+import { BY_ID } from '../js/exercises.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseNarrative, EXAMPLE, coverage } from '../js/narrative.js';
@@ -87,7 +88,7 @@ test('in palestra si usano gli attrezzi della palestra, non quelli di casa', () 
       const plan = generatePlan(p, { startISO: '2026-11-09' });
       for (const d of plan.schedule.filter((x) => x.session?.luogo === 'palestra' && x.session.kind === 'forza')) {
         const main = d.session.blocks.find((b) => b.name === 'Parte principale').items.filter((i) => !/^c_|^k_|^g_/.test(i.id));
-        const gym = main.filter((i) => /p_floor|p_machine|p_panca|s_legpress|s_goblet|s_backsquat|h_rdl$|h_hipthrust|h_stacco|l_affman|r_man|r_pulley|r_bil|t_lat$|t_neg|t_trazioni|v_lento|v_alzate/.test(i.id));
+        const gym = main.filter((i) => BY_ID[i.id].eq.some((q) => ['palestra', 'manubri', 'sbarra'].includes(q)));
         assert.ok(gym.length >= Math.ceil(main.length * 0.6), `${obiettivo}/${esperienza}: ${main.map((i) => i.id).join(', ')}`);
         assert.ok(!main.some((i) => /_el$|_el_|r_towel|r_tavolo|s_sitstand|p_muro/.test(i.id)), `${obiettivo}: attrezzi di casa in palestra`);
       }

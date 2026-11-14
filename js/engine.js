@@ -4,7 +4,9 @@
 
 import { EXERCISES, BY_ID } from './exercises.js';
 import { computeProfile, PAIN_REGIONS, LEVEL_LABEL, AREAS } from './assessment.js';
-import { PROTEIN_FACTOR, DIET_LABEL, mealPlan, dietNotes } from './diet.js';
+import { PROTEIN_FACTOR, DIET_LABEL, mealPlan, dietNotes, weekMenu } from './diet.js';
+import { diagnosi, regoleCibo, ZONE_PATTERNS, ZONE_BY_SESSION, ZONE_LABEL } from './indagine.js';
+import { hasDemo } from './demos.js';
 
 // ------------------------------------------------------------------
 // Opzioni usate dall'interfaccia
@@ -124,12 +126,17 @@ export function derive(p, ctx = {}) {
   // chi completa almeno 5 piegamenti sulle punte può farli nel piano
   const pu = cp?.maxes?.pushup;
   const pushH = pu && pu.variant === 'classici' && pu.reps >= 5 ? Math.max(push, 2) : push;
-  const pl = { push_h: pushH, push_v: push, pull_h: pull, pull_v: pull, squat: legs, lunge: legs, glutei: legs, calf: legs, hinge: legs, core };
+  const pl = {
+    push_h: pushH, push_v: push, pull_h: pull, pull_v: pull, squat: legs, lunge: legs, glutei: legs, calf: legs, hinge: legs, core,
+    // complementari: seguono il livello del gruppo a cui appartengono
+    bicipiti: pull, post_iso: pull, dorso_iso: pull, tricipiti: push, petto_iso: push, spalle_iso: push,
+    quad_iso: legs, ham_iso: legs, adduttori: legs, lombari: legs,
+  };
   // fastidio lieve: un livello in meno sugli schemi che caricano quella zona
-  if (sensitive.has('spalle')) ['push_h', 'push_v', 'pull_h', 'pull_v'].forEach((k) => pl[k]--);
-  if (sensitive.has('ginocchia')) ['squat', 'lunge'].forEach((k) => pl[k]--);
+  if (sensitive.has('spalle')) ['push_h', 'push_v', 'pull_h', 'pull_v', 'petto_iso', 'spalle_iso'].forEach((k) => pl[k]--);
+  if (sensitive.has('ginocchia')) ['squat', 'lunge', 'quad_iso'].forEach((k) => pl[k]--);
   if (sensitive.has('anche')) ['lunge', 'hinge'].forEach((k) => pl[k]--);
-  if (sensitive.has('schiena')) ['hinge', 'core'].forEach((k) => pl[k]--);
+  if (sensitive.has('schiena')) ['hinge', 'core', 'lombari'].forEach((k) => pl[k]--);
   if (sensitive.has('polsi')) ['push_h'].forEach((k) => pl[k]--);
   for (const k in pl) pl[k] = clamp(Math.min(pl[k], safety), 1, 3);
   const testLv = [lv.push, lv.legs, lv.core, lv.cardio].filter((x) => x !== null && x !== undefined);
@@ -157,6 +164,22 @@ export function derive(p, ctx = {}) {
   if (flags.hamstringsTight) { bump(['h_ponte', 'h_hipthrust', 'h_ponte1'], 1.5); bump(['h_stacco', 'h_rdl'], -1.5); }
   if (flags.coreWeak || sensitive.has('schiena') || cond.has('schiena')) { bump(['c_birddog', 'c_deadbug', 'c_curlup', 'c_pallof'], 1.5); bump(['c_hollow', 'c_crunch'], -2); }
   if (cond.has('ginocchia') || sensitive.has('ginocchia')) bump(['s_sitstand', 'l_step', 'g_abd_el', 'g_clam', 'h_ponte'], 1);
+  // indagine: zone prioritarie e cause reali del risultato cercato
+  const dg = diagnosi(p, cp);
+  const zones = dg.zone;
+  if (dg.drivers.postpartum) {
+    blocked.add('flessioneCarico');
+    ['c_crunch', 'c_bike', 'c_russian', 'c_cable', 'c_legraise', 'c_plank', 'c_mountain', 'c_hollow', 'c_reverse'].forEach((id) => exclude.add(id));
+    bump(['c_vacuum', 'c_deadbug', 'c_birddog'], 3);
+  }
+  if (dg.drivers.posture) { bump(['c_deadbug', 'c_vacuum', 'h_ponte', 'h_hipthrust', 'c_reverse'], 1.5); bump(['h_superman', 'h_hyper'], -2); }
+  if (zones.includes('addome')) {
+    // prima l'attivazione profonda, poi tenute, poi addominali dinamici
+    if (core <= 1 || dg.drivers.coreWeak) bump(['c_vacuum', 'c_deadbug', 'c_heel', 'c_plank_g'], 2);
+    else bump(['c_plank', 'c_reverse', 'c_vacuum', 'c_bike', 'c_cable'], 1.5);
+  }
+  // a parità di schema, meglio un esercizio con la foto dimostrativa
+  for (const e of EXERCISES) if (!hasDemo(e.id)) prefer[e.id] = (prefer[e.id] || 0) - 1.25;
   if (ctx.favorites?.length) bump(ctx.favorites, 6);
 
   const hiitOk = !['cuore', 'petto', 'ipertensione', 'gravidanza', 'intervento'].some((c) => cond.has(c)) && bmi < 35 && p.eta < 70;
@@ -168,6 +191,7 @@ export function derive(p, ctx = {}) {
     cp, flags, exclude, prefer, hrRest: cp?.body?.hrRest || null, cardioL: lv.cardio ?? null,
     maxes: cp?.maxes || {}, weakAreas: (cp?.weak || []).map((a) => a.id),
     swaps: ctx.swaps || {}, exAdj: ctx.exAdj || {}, favorites: ctx.favorites || [],
+    zones, dg,
   };
 }
 
@@ -295,9 +319,10 @@ function shiftReps(reps, delta) {
   });
 }
 
-function dose(ex, goal, d, phase) {
+function dose(ex, goal, d, phase, prio = false) {
   const L = ex.cat === 'strength' && ex.pat && d.pl ? d.pl[ex.pat] : d.level;
   let [sets, reps, rest] = DOSE[goal][L];
+  if (prio) sets = Math.min(sets + 1, 5);
   if (phase === 3) sets = Math.min(sets + 1, 5);
   if (phase === 4) sets = Math.max(sets - 1, 1);
   const adj = clamp(d.exAdj?.[ex.id] || 0, -2, 2);
@@ -327,7 +352,7 @@ function dose(ex, goal, d, phase) {
   if (adj) reps = shiftReps(reps, adj * 2);
   if (adj >= 2) sets = Math.min(sets + 1, 5);
   if (adj <= -2) sets = Math.max(sets - 1, 1);
-  const perSide = ['l_step', 'l_affind', 'l_laterale', 'l_affman', 'l_bulgaro', 'r_man', 'h_ponte1', 'g_clam', 'g_kick', 'c_birddog', 'c_deadbug'].includes(ex.id);
+  const perSide = ['l_step', 'l_affind', 'l_laterale', 'l_affman', 'l_bulgaro', 'r_man', 'h_ponte1', 'g_clam', 'g_kick', 'c_birddog', 'c_deadbug', 'a_kick', 'g_abd_piedi', 'g_cavo'].includes(ex.id);
   return { sets, text: `${sets} × ${reps}${perSide ? ' per lato' : ''}`, rest, basis };
 }
 
@@ -383,12 +408,21 @@ const PATTERNS = {
 
 // sessione "focus": gli schemi dei punti deboli misurati
 function focusPatterns(d, variant) {
+  if (d.zones?.length) {
+    const zs = d.zones.map((z) => ZONE_PATTERNS[z]);
+    const pats = [...zs.flatMap((z) => z.main), ...zs.flatMap((z) => z.acc)];
+    // alterna l'ordine per non ripetere sempre gli stessi esercizi
+    return variant % 2 ? [...pats.slice(1), pats[0], 'core'] : [...pats, 'core'];
+  }
   const w = d.weakAreas || [];
   const map = { forzaSup: ['push_h', 'pull_h', 'push_v', 'pull_v'], forzaInf: ['squat', 'lunge', 'glutei', 'hinge'], core: ['core', 'core', 'glutei'], equilibrio: ['lunge', 'glutei', 'core'], mobilita: ['glutei', 'core', 'hinge'] };
   const pats = w.flatMap((a) => map[a] || []);
   if (pats.length >= 3) return [...pats, 'core'];
   return variant % 2 ? ['squat', 'lunge', 'glutei', 'core', 'hinge'] : ['push_h', 'pull_h', 'push_v', 'core', 'pull_v'];
 }
+
+// schemi complementari (un solo muscolo): recuperi più brevi
+const ISO_PATS = new Set(['bicipiti', 'tricipiti', 'petto_iso', 'spalle_iso', 'post_iso', 'dorso_iso', 'quad_iso', 'ham_iso', 'adduttori', 'lombari', 'calf', 'core']);
 
 const TITLES = {
   full: 'Forza total body', upper: 'Forza parte alta', lower: 'Forza parte bassa',
@@ -424,7 +458,9 @@ function correctives(d, extraBalance) {
   if (f.shouldersStiff) ids.push('w_angeli');
   if (f.hamstringsTight) ids.push('w_hinge');
   if (f.squatLimited) ids.push('w_squatmob');
+  if (d.dg?.drivers.posture) ids.push('h_ponte', 'c_deadbug');
   if (f.coreWeak) ids.push('c_birddog');
+  if (d.dg?.belly && !d.dg.drivers.posture) ids.push('c_vacuum');
   if (f.balancePoor || extraBalance) ids.push('b_unagamba');
   return [...new Set(ids)].map((id) => BY_ID[id]).filter((e) => e && allowed(e, d, 1));
 }
@@ -448,6 +484,7 @@ function targetedStretches(d, p) {
   if (f.anklesStiff) ids.push('m_polpacci');
   if (f.shouldersStiff) ids.push('m_pett', 'm_openbook');
   if (f.squatLimited) ids.push('m_flessori', 'm_9090');
+  if (d.dg?.drivers.posture) ids.unshift('m_flessori');
   if (p.lavoro === 'sedentario') ids.push('m_flessori');
   if (d.sensitive?.has('schiena') || d.cond.has('schiena')) ids.push('m_bambino');
   if (d.sensitive?.has('collo') || d.cond.has('collo')) ids.push('m_collo');
@@ -456,7 +493,7 @@ function targetedStretches(d, p) {
 
 function cooldownBlock(min, d, variant, p) {
   if (min <= 0) return null;
-  const want = p.stress === 'alto' || d.cond.has('ipertensione');
+  const want = p.stress === 'alto' || d.cond.has('ipertensione') || !!d.dg?.drivers.bloat;
   const n = Math.max(1, clamp(Math.floor(min * 60 / 50), 1, 6) - (want ? 1 : 0));
   const tgt = targetedStretches(d, p).slice(0, n);
   const exs = pickMany('mobility', d, Math.max(n - tgt.length, 0), variant + 1, ['m_respiro', ...tgt.map((e) => e.id)]);
@@ -510,6 +547,10 @@ function strengthSession(type, minutes, p, d, variant, phase) {
     if (weak.includes('core')) patterns.splice(3, 0, 'core');
   } else if (type === 'upper' && weak.includes('core')) patterns.splice(4, 0, 'core');
   else if (type === 'lower' && weak.includes('core')) patterns.splice(3, 0, 'core');
+  // zone prioritarie (dall'indagine) allenabili in questo tipo di sessione
+  const zs = (d.zones || []).filter((z) => (ZONE_BY_SESSION[type] || []).includes(z));
+  const zonePats = new Set(zs.flatMap((z) => [...ZONE_PATTERNS[z].main, ...ZONE_PATTERNS[z].acc]));
+  const zoneOf = (pat) => zs.find((z) => ZONE_PATTERNS[z].main.includes(pat) || ZONE_PATTERNS[z].acc.includes(pat));
   const used = new Set();
   const chosen = [];
 
@@ -519,7 +560,22 @@ function strengthSession(type, minutes, p, d, variant, phase) {
     const [sets, , rest] = DOSE[goal][Math.max(...Object.values(d.pl || { a: d.level }))];
     perEx = (sets * (40 + rest)) / 60 + 0.5;
   }
-  const target = circuit ? clamp(Math.floor(main / 3 / perEx), 3, 8) : clamp(Math.floor(main / perEx), 2, 8);
+  let target = circuit ? clamp(Math.floor(main / 3 / perEx), 3, 8) : clamp(Math.floor(main / perEx), 2, 8);
+  if (zs.length && type !== 'focus') {
+    // i fondamentali delle zone aprono la sessione; i complementari (più brevi) la chiudono
+    if (!circuit && main >= 30) target = Math.min(target + 1, 8);
+    const mains = [...new Set(zs.flatMap((z) => ZONE_PATTERNS[z].main))].filter((x) => patterns.includes(x));
+    const nAcc = Math.min(target - 2, target >= 7 ? 3 : target >= 5 ? 2 : 1);
+    // complementari distribuiti a turno tra le zone
+    const accs = [];
+    for (let k = 0; accs.length < nAcc && k < 6; k++) for (const z of zs) {
+      const a = ZONE_PATTERNS[z].acc;
+      if (accs.length < nAcc && k < Math.max(a.length, 2)) accs.push(a[(k + variant) % a.length]);
+    }
+    const core = accs.includes('core');
+    const rest = patterns.filter((x, idx) => !(mains.includes(x) && patterns.indexOf(x) === idx) && !(core && x === 'core'));
+    patterns = [...[...mains, ...rest].slice(0, Math.max(1, target - accs.length)), ...accs];
+  }
 
   for (let i = 0; i < patterns.length && chosen.length < target; i++) {
     const ex = pickPattern(patterns[i], d, variant + Math.floor(i / 5), used, preferLoad);
@@ -537,16 +593,19 @@ function strengthSession(type, minutes, p, d, variant, phase) {
     mainBlock = {
       name: 'Circuito', minutes: main,
       note: `${rounds} giri: 40 s di lavoro e 20 s di pausa per esercizio, 1 minuto di pausa tra un giro e l’altro.`,
-      items: chosen.map((e) => item(e, e.unit === 'sec' ? '40 s' : '40 s · ritmo controllato', 20)),
+      items: chosen.map((e) => item(e, e.unit === 'sec' ? '40 s' : '40 s · ritmo controllato', 20, zonePats.has(e.pat) && zoneOf(e.pat) ? `Priorità: ${ZONE_LABEL[zoneOf(e.pat)].toLowerCase()}` : undefined)),
     };
   } else {
     mainBlock = {
       name: 'Parte principale', minutes: main,
       note: 'Esegui tutte le serie di un esercizio prima di passare al successivo. Ultime 2 ripetizioni impegnative ma con tecnica pulita.',
       items: chosen.map((e) => {
-        const ds = dose(e, goal, d, phase);
+        const zona = zonePats.has(e.pat) ? zoneOf(e.pat) : null;
+        const ds = dose(e, goal, d, phase, !!zona);
+        if (ISO_PATS.has(e.pat)) ds.rest = Math.min(ds.rest, 45);
         const it = item(e, ds.text + ` · recupero ${ds.rest} s`, ds.rest);
         if (ds.basis) it.basis = ds.basis;
+        if (zona) it.tag = `Priorità: ${ZONE_LABEL[zona].toLowerCase()}`;
         if (d.exAdj?.[e.id]) it.tag = d.exAdj[e.id] > 0 ? 'Progressione' : 'Regressione';
         if (d.swaps && Object.values(d.swaps).includes(e.id)) it.tag = 'Scelto da te';
         else if (d.favorites?.includes(e.id) && d.equip.has('palestra')) it.tag = 'Dalla tua scheda';
@@ -557,7 +616,8 @@ function strengthSession(type, minutes, p, d, variant, phase) {
 
   const blocks = [warmupBlock(warm, d, variant, d.age >= 65 || d.cond.has('osteoporosi')), mainBlock];
   const prio = weak.map((w) => AREAS.find((a) => a.id === w)?.label).filter(Boolean);
-  if (prio.length && !circuit) mainBlock.note += ` Priorità per te: ${prio.join(' e ').toLowerCase()}.`;
+  if (zs.length && !circuit) mainBlock.note += ` Le tue zone prioritarie (${zs.map((z) => ZONE_LABEL[z].toLowerCase()).join(', ')}) hanno una serie in più.`;
+  else if (prio.length && !circuit) mainBlock.note += ` Priorità per te: ${prio.join(' e ').toLowerCase()}.`;
   if (finisher) {
     const mod = cardioModality(d, goal, variant, true);
     blocks.push({
@@ -569,7 +629,8 @@ function strengthSession(type, minutes, p, d, variant, phase) {
   if (cb) blocks.push(cb);
 
   const letter = String.fromCharCode(65 + (variant % 3));
-  const title = type === 'focus' && weak.length ? `Focus: ${weak.map((w) => AREAS.find((a) => a.id === w)?.short.toLowerCase()).join(' e ')}` : `${TITLES[type]}${['full', 'upper', 'lower', 'circuito'].includes(type) ? ' ' + letter : ''}`;
+  const title = type === 'focus' && d.zones?.length ? `Focus: ${d.zones.map((z) => ZONE_LABEL[z].toLowerCase()).join(' e ')}`
+    : type === 'focus' && weak.length ? `Focus: ${weak.map((w) => AREAS.find((a) => a.id === w)?.short.toLowerCase()).join(' e ')}` : `${TITLES[type]}${['full', 'upper', 'lower', 'circuito'].includes(type) ? ' ' + letter : ''}`;
   return { type, kind: 'forza', title, minutes, blocks };
 }
 
@@ -773,6 +834,7 @@ export function nutrition(p, opts = {}) {
 
   let mode = 'mantenimento';
   let rate = 0; // kg/settimana
+  const fatDriver = d.dg?.drivers.fat || 0;
   if (d.cond.has('gravidanza')) {
     mode = 'mantenimento';
     notes.push('In gravidanza non si fa deficit calorico: il fabbisogno aumenta con i trimestri. Segui le indicazioni del ginecologo o di un nutrizionista.');
@@ -795,7 +857,11 @@ export function nutrition(p, opts = {}) {
       rate = w * { 1: 0.003, 2: 0.002, 3: 0.0012 }[d.level];
     }
   } else if (goal === 'tonificare') {
-    if (d.bmi >= 25 || (target && target < w - 1)) { mode = 'deficit'; rate = clamp(w * 0.0035, 0.2, 0.5); }
+    // tonificare con grasso addominale da togliere: deficit leggero, più deciso se il girovita è alto
+    if (d.bmi >= 25 || fatDriver >= 1 || (target && target < w - 1)) { mode = 'deficit'; rate = clamp(w * (fatDriver >= 2 ? 0.005 : 0.0035), 0.2, 0.6); }
+    else if (d.dg?.belly) notes.push('Il tuo girovita è nella norma: niente dieta ipocalorica. Mangi quanto consumi, con più proteine, e il lavoro si concentra su tono e postura.');
+  } else if (fatDriver >= 2 && d.dg?.belly && d.bmi >= 22) {
+    mode = 'deficit'; rate = clamp(w * 0.0035, 0.2, 0.5);
   } else if (target && target < w - 1) {
     mode = 'deficit'; rate = clamp(w * 0.0035, 0.2, 0.5);
   } else if (target && target > w + 1 && d.bmi < 25) {
@@ -816,7 +882,8 @@ export function nutrition(p, opts = {}) {
   }
   kcal = round(kcal, 10);
 
-  let refW = d.bmi >= 30 ? 25 * (p.altezza / 100) ** 2 : w;
+  // in sovrappeso le proteine si calcolano sul peso a BMI 25, non sul peso attuale
+  let refW = d.bmi > 25 ? 25 * (p.altezza / 100) ** 2 : w;
   let gkg = { deficit: 1.8, surplus: 1.8, mantenimento: goal === 'tonificare' || goal === 'massa' ? 1.8 : goal === 'resistenza' ? 1.5 : 1.3 }[mode];
   if (lean) { refW = lean; gkg = { deficit: 2.3, surplus: 2.2, mantenimento: goal === 'tonificare' || goal === 'massa' ? 2.2 : goal === 'resistenza' ? 1.9 : 1.7 }[mode]; }
   gkg *= PROTEIN_FACTOR[p.dieta] || 1;
@@ -830,7 +897,11 @@ export function nutrition(p, opts = {}) {
   if (d.cond.has('diabete')) notes.push('Con il diabete distribuisci i carboidrati nei pasti, preferisci quelli integrali e controlla la glicemia prima e dopo l’allenamento.');
 
   const dieta = p.dieta || 'onnivora';
-  return { bmr: Math.round(bmr), tdee: Math.round(tdee), kcal, protein, fat, carbs, water, fiber: Math.round(kcal / 1000 * 14), mode, rate, target, notes, dieta, meals: mealPlan(protein, dieta), dietTips: dietNotes(dieta, p) };
+  return {
+    bmr: Math.round(bmr), tdee: Math.round(tdee), kcal, protein, fat, carbs, water, fiber: Math.round(kcal / 1000 * 14), mode, rate, target, notes, dieta,
+    meals: mealPlan(protein, dieta), dietTips: dietNotes(dieta, p),
+    menu: weekMenu(p, { kcal, protein }), regole: regoleCibo(p, d.dg),
+  };
 }
 
 export function timeline(p, nutri, startISO) {
@@ -890,7 +961,7 @@ export function formatDate(iso) {
 export function habits(p, ctx = {}) {
   const d = derive(p, ctx);
   const out = [];
-  const stepsTarget = d.steps >= 10000 ? d.steps : clamp(round(d.steps + 2000, 500), 6000, 10000);
+  const stepsTarget = d.steps >= 10000 ? d.steps : clamp(round(d.steps + (d.dg?.drivers.fat >= 1 ? 3000 : 2000), 500), d.dg?.drivers.fat >= 1 ? 7000 : 6000, 10000);
   out.push({
     icon: '👟', title: `Obiettivo passi: ${stepsTarget.toLocaleString('it-IT')} al giorno`,
     text: d.steps >= 10000 ? 'Ottimo livello di movimento: mantienilo anche nei giorni di riposo.' : 'Aumenta di circa 1.000 passi a settimana fino all’obiettivo. Telefonate camminando, scale invece dell’ascensore, parcheggia più lontano.',
@@ -967,6 +1038,8 @@ function generatePlanBase(p, opts = {}) {
     habits: habits(p, ctx),
     alerts: alerts(p, ctx),
     profile: cp,
+    diagnosi: d.dg,
+    zones: d.zones,
     _d: d,
     personal: null,
   };
