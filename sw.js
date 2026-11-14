@@ -1,28 +1,32 @@
 // Service worker: rende l'app disponibile offline.
-// Cambia VERSION a ogni rilascio per aggiornare la cache.
-const VERSION = 'ritmo-v7';
+// Cambia VERSION a ogni rilascio per aggiornare la cache del codice.
+// Le foto degli esercizi stanno in una cache a parte, che sopravvive agli aggiornamenti.
+const VERSION = 'ritmo-v8';
+const MEDIA = 'ritmo-media-v1';
 const ASSETS = [
   './',
   './index.html',
   './manifest.webmanifest',
   './css/style.css',
   './js/app.js',
+  './js/flow.js',
+  './js/indagine.js',
   './js/engine.js',
   './js/exercises.js',
   './js/guide.js',
-  './js/motions.js',
-  './js/viewer3d.js',
+  './js/guide-extra.js',
+  './js/demos.js',
+  './js/demo.js',
   './js/fx.js',
   './js/sheet.js',
   './js/player.js',
   './js/assessment.js',
   './js/assess-ui.js',
-  './js/narrative.js', './js/gymreview.js',
+  './js/narrative.js',
+  './js/gymreview.js',
   './js/diet.js',
-  './vendor/three.module.min.js',
-  './fonts/space-grotesk.woff2',
-  './fonts/jetbrains-mono-500.woff2',
-  './fonts/jetbrains-mono-700.woff2',
+  './fonts/figtree.woff2',
+  './fonts/fraunces.woff2',
   './icons/icon.svg',
   './icons/icon-192.png',
   './icons/icon-512.png',
@@ -36,15 +40,29 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION && k !== MEDIA).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
 
-// Stale-while-revalidate: risposta immediata dalla cache, aggiornamento in background.
 self.addEventListener('fetch', (e) => {
   const req = e.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  const url = new URL(req.url);
+  if (req.method !== 'GET' || url.origin !== location.origin) return;
+  // foto degli esercizi: prima la cache (non cambiano), poi la rete
+  if (url.pathname.includes('/media/')) {
+    e.respondWith(
+      caches.open(MEDIA).then(async (cache) => {
+        const cached = await cache.match(req);
+        if (cached) return cached;
+        const res = await fetch(req);
+        if (res.ok) cache.put(req, res.clone());
+        return res;
+      }),
+    );
+    return;
+  }
+  // codice: risposta immediata dalla cache, aggiornamento in background
   e.respondWith(
     caches.open(VERSION).then(async (cache) => {
       const cached = await cache.match(req, { ignoreSearch: true });
