@@ -19,7 +19,7 @@ import { DIET_LABEL } from './diet.js';
 import { parseGymList, reviewGym, VERDICT_LABEL, VERDICT_COUNT, GYM_PICKS, lineIsPick } from './gymreview.js';
 import { startAssessment, renderAssessment, mountAssessment, handleAssessmentClick, assessmentActive, cancelAssessment } from './assess-ui.js';
 import { SOGNI, ZONE_LABEL, goalFromSogni } from './indagine.js';
-import { SEZIONI, passiPer, BOZZA_VUOTA } from './flow.js';
+import { SEZIONI, passiPer, passiCoperti, BOZZA_VUOTA } from './flow.js';
 import { thumbHTML, warmDemos } from './demo.js';
 import { demoFor } from './demos.js';
 
@@ -56,6 +56,13 @@ const today = () => toISO(new Date());
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = (n, d = 0) => Number(n).toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d });
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+/** cambio di schermata con dissolvenza, dove il browser lo permette */
+function transition(go) {
+  if (!document.startViewTransition || reduced()) { go(); return; }
+  const t = document.startViewTransition(go);
+  // una transizione interrotta da quella successiva non è un errore
+  [t.ready, t.finished, t.updateCallbackDone].forEach((p) => p?.catch(() => {}));
+}
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
 function currentWeek() {
@@ -150,9 +157,7 @@ function route() {
 
 window.addEventListener('hashchange', () => {
   closeSheet();
-  const go = () => { window.scrollTo(0, 0); route(); };
-  if (document.startViewTransition && !reduced()) document.startViewTransition(go);
-  else go();
+  transition(() => { window.scrollTo(0, 0); route(); });
 });
 
 function rerender() {
@@ -237,8 +242,23 @@ function slotEditor(d) {
     ${S.length < 3 ? '<button type="button" class="btn soft wide" data-action="slot-add">+ Aggiungi un altro tipo di sessione</button>' : ''}
     <p class="small muted" id="week-total">${weekTotalText(d)}</p>`;
 }
+/** cosa ho capito dal racconto: ogni riga porta alla domanda corrispondente */
+function recap(d) {
+  const row = (step, label, value) => (value ? `<button type="button" class="set-row" data-action="flow-jump" data-step="${step}"><span class="grow"><span class="small muted">${label}</span><b>${esc(value)}</b></span>${ICON.next}</button>` : '');
+  const pains = Object.entries(d.dolori || {}).filter(([, v]) => v > 0).map(([k, v]) => `${PAIN_REGIONS.find((x) => x.id === k)?.label.toLowerCase()} (${['', 'lieve', 'medio', 'forte'][v]})`);
+  const rows = [
+    row('base', 'Chi sei', [d.sesso ? (d.sesso === 'F' ? 'Donna' : 'Uomo') : '', d.eta ? `${d.eta} anni` : '', d.altezza ? `${d.altezza} cm` : '', d.peso ? `${fmt(d.peso, 1)} kg` : ''].filter(Boolean).join(' · ')),
+    row('sogni', 'Obiettivo', [GOALS.find((g) => g.id === d.obiettivo)?.label, d.pesoObiettivo ? `${d.pesoObiettivo} kg` : '', d.dataObiettivo ? `entro il ${formatDate(d.dataObiettivo)}` : ''].filter(Boolean).join(' · ')),
+    row('tempo', 'Allenamenti', (d.sessioni || []).map((x) => `${x.giorni} × ${x.minuti} min ${LUOGO_LABEL[x.luogo].toLowerCase()}`).join(' + ')),
+    row('scheda', 'In palestra fai', gymLines(d.schedaPalestra).join(', ')),
+    row('giornata', 'La tua giornata', [{ sedentario: 'lavoro da seduto', in_piedi: 'lavoro in piedi', fisico: 'lavoro fisico' }[d.lavoro], d.sonno ? `${d.sonno} ore di sonno` : ''].filter(Boolean).join(' · ')),
+    row('dieta', 'A tavola', d.dieta ? DIET_LABEL[d.dieta] : ''),
+    row('dolori', 'Salute', [...pains, ...(d.condizioni || []).map((c) => CONDITIONS.find((x) => x.id === c)?.label)].filter(Boolean).join(', ')),
+  ].filter(Boolean);
+  return `<section class="card">${rows.join('') || '<p class="muted">Non sono riuscito a ricavare molto: nessun problema, te lo chiedo io.</p>'}</section>`;
+}
 const flowHelpers = {
-  esc, seg, chips, num, opts, multi, slotEditor, slotError,
+  esc, seg, chips, num, opts, multi, slotEditor, slotError, recap,
   gymPicker: (d) => `<div class="search">${ICON.search}<input type="text" id="gym-q" placeholder="Cerca esercizio o macchinario" autocomplete="off"></div><div id="gym-picker">${gymPickerHTML(d.schedaPalestra || '')}</div>`,
 };
 
@@ -308,8 +328,7 @@ function updateWeekTotal() {
 
 function flowGo(i) {
   flowIdx = i;
-  const go = () => { route(); window.scrollTo(0, 0); };
-  if (document.startViewTransition && !reduced()) document.startViewTransition(go); else go();
+  transition(() => { route(); window.scrollTo(0, 0); });
 }
 function flowNext() {
   const steps = passiPer(draft);
@@ -326,7 +345,7 @@ function flowNext() {
 function finishFlow() {
   const p = { ...draft };
   const wasEdit = flowEdit && !!state.profile;
-  ['_edit', '_story', '_zoneScelte', 'assumed'].forEach((k) => delete p[k]);
+  ['_edit', '_story', '_skip', '_zoneScelte', 'assumed'].forEach((k) => delete p[k]);
   p.sessioni = (p.sessioni || []).filter((x) => x.giorni > 0);
   const tot = slotTot(p);
   p.giorni = Math.min(7, tot.g);
@@ -342,8 +361,11 @@ function finishFlow() {
   const goalChanged = !old || old.obiettivo !== p.obiettivo || old.pesoObiettivo !== p.pesoObiettivo || old.peso !== p.peso;
   state.profile = p;
   if (!wasEdit || goalChanged) { state.planStart = state.planStart && wasEdit && !goalChanged ? state.planStart : today(); state.calorieAdjust = 0; }
-  if (!state.weights.some((w) => w.date === today())) state.weights.push({ date: today(), kg: p.peso });
-  else state.weights = state.weights.map((w) => (w.date === today() ? { ...w, kg: p.peso } : w));
+  // la pesata di oggi si registra alla creazione del profilo o quando il peso viene cambiato
+  if (!wasEdit || old.peso !== p.peso) {
+    state.weights = state.weights.filter((w) => w.date !== today());
+    state.weights.push({ date: today(), kg: p.peso });
+  }
   save();
   draft = null; storyResult = null;
   justFinished = true;
@@ -448,12 +470,9 @@ async function analyzeStory(btn) {
   draft.misure = { ...(old.misure || {}), ...(result.profile.misure || {}) };
   if (draft.obiettivo && !draft.sogni?.length) draft.sogni = SOGNI.filter((s) => s.goal === draft.obiettivo).slice(0, 1).map((s) => s.id);
   startFlow(!!state.profile);
-  const steps = passiPer(draft);
-  const probe = JSON.parse(JSON.stringify(draft));
-  const first = steps.findIndex((s) => s.id !== 'nome' && (s.errore(probe, flowHelpers) || ['sogni', 'zone'].includes(s.id)));
-  flowIdx = Math.max(0, first);
-  const n = steps.length - steps.filter((s) => !s.errore(probe, flowHelpers)).length;
-  toast(n ? `Ho capito molto dal tuo racconto: mi mancano poche domande` : 'Ho capito tutto: controlla e conferma');
+  // le domande a cui il racconto ha già risposto si saltano: restano il riepilogo e quello che manca
+  draft._skip = passiCoperti(draft, result.found);
+  flowIdx = 0;
   location.hash = '#/inizio';
 }
 
@@ -709,7 +728,7 @@ function viewTraining() {
   </section>` : ''}
 
   <div class="stack" style="margin-top:20px">
-    <a class="card step-card" href="#/esercizi"><span class="step-ico">📚</span><div><b>Tutti gli esercizi</b><p class="small muted">${EXERCISES.length} esercizi con foto e spiegazione passo passo.</p></div>${ICON.next}</a>
+    <a class="card step-card" href="#/esercizi"><span class="step-ico">📚</span><div><b>Tutti gli esercizi</b><p class="small muted">${EXERCISES.length} esercizi spiegati passo passo, ${EXERCISES.filter((e) => demoFor(e.id)).length} con foto reali.</p></div>${ICON.next}</a>
     <a class="card step-card" href="#/partenza"><span class="step-ico">📏</span><div><b>Il tuo punto di partenza</b><p class="small muted">Test, composizione corporea e livelli.</p></div>${ICON.next}</a>
   </div>
   <p class="disclaimer">Ritmo dà indicazioni generali e non sostituisce medici, fisioterapisti o nutrizionisti. Se senti dolore, fermati.</p>`;
@@ -797,9 +816,8 @@ function viewFood() {
         <h3>${esc(m.name)}</h3>
         ${m.items.length ? `<ul class="portions">${m.items.map((i) => `<li class="${i.plus ? 'plus' : ''}"><span>${i.plus ? '+ ' : ''}${esc(i.name)}</span><b>${esc(i.label)}</b></li>`).join('')}</ul>` : ''}
         ${m.fuori ? `<p class="small muted">${esc(m.nota)}</p>` : ''}
-        ${m.items.some((i) => i.plus) ? '<p class="small muted">Con “+” l’aggiunta che ti porta alle proteine del giorno.</p>' : ''}
       </section>`).join('')}
-    <p class="small muted" style="text-align:center">Totale del giorno: circa ${fmt(Math.round(day.kcal / 10) * 10)} kcal e ${Math.round(day.protein)} g di proteine. Pasta, riso e cereali pesati a crudo; legumi già cotti.</p>
+    <p class="small muted" style="text-align:center">Totale del giorno: circa ${fmt(Math.round(day.kcal / 10) * 10)} kcal e ${Math.round(day.protein)} g di proteine. Pasta, riso e cereali pesati a crudo; legumi già cotti.${day.meals.some((m) => m.items.some((i) => i.plus)) ? ' Le voci con “+” sono aggiunte che ti portano alle proteine del giorno.' : ''}</p>
   </div>
 
   ${n.regole.length ? `<div class="section-title"><h2>Le tue regole</h2></div><section class="card">${tips(n.regole)}</section>` : ''}
@@ -1374,6 +1392,12 @@ document.addEventListener('click', (e) => {
     }
     case 'edit-section': e.preventDefault(); draft = null; startFlow(true, t.dataset.step); if (location.hash === '#/inizio') route(); else location.hash = '#/inizio'; break;
     case 'flow-next': flowNext(); break;
+    case 'flow-jump': {
+      // dal riepilogo: riapre una domanda che il racconto aveva già coperto
+      draft._skip = (draft._skip || []).filter((id) => id !== t.dataset.step);
+      flowGo(Math.max(0, passiPer(draft).findIndex((x) => x.id === t.dataset.step)));
+      break;
+    }
     case 'flow-back':
       if (flowIdx > 0) flowGo(flowIdx - 1);
       else { draft = null; location.hash = state.profile ? '#/profilo' : '#/benvenuto'; }

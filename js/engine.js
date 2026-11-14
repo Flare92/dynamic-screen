@@ -551,7 +551,9 @@ function strengthSession(type, minutes, p, d, variant, phase) {
   const zs = (d.zones || []).filter((z) => (ZONE_BY_SESSION[type] || []).includes(z));
   const zonePats = new Set(zs.flatMap((z) => [...ZONE_PATTERNS[z].main, ...ZONE_PATTERNS[z].acc]));
   const zoneOf = (pat) => zs.find((z) => ZONE_PATTERNS[z].main.includes(pat) || ZONE_PATTERNS[z].acc.includes(pat));
-  const used = new Set();
+  // gli esercizi già usati come correttivi nel riscaldamento non si ripetono nella parte principale
+  const extraBal = d.age >= 65 || d.cond.has('osteoporosi');
+  const used = new Set(correctives(d, extraBal).slice(0, 3).map((e) => e.id));
   const chosen = [];
 
   let perEx;

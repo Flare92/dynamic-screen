@@ -19,6 +19,13 @@ const VITA = MEASURES.find((m) => m.id === 'vita');
 const FREQ = [['mai', 'Mai o quasi'], ['avolte', 'Ogni tanto'], ['spesso', 'Spesso'], ['ogni', 'Ogni giorno']];
 
 export const PASSI = [
+  // ------------------------------------------------------------ dopo il racconto a parole
+  {
+    id: 'riepilogo', sez: 0, quando: (d) => !!d._story, coach: 'Ho letto il tuo racconto. Controlla che abbia capito bene: tocca una riga per correggerla.',
+    titolo: 'Ecco cosa ho capito', sotto: 'Poi ti faccio solo le domande che mancano.',
+    render: (d, h) => h.recap(d),
+    errore: () => null,
+  },
   // ------------------------------------------------------------ Tu
   {
     id: 'nome', sez: 0, coach: 'Ciao! Sono il tuo coach. Prima di proporti qualsiasi esercizio voglio conoscerti bene: ci vogliono circa cinque minuti.',
@@ -221,8 +228,18 @@ export const PASSI = [
   },
 ];
 
-/** i passi che riguardano questa persona, nell'ordine */
-export const passiPer = (d) => PASSI.filter((p) => !p.quando || p.quando(d));
+/** i passi che riguardano questa persona, nell'ordine (senza quelli già coperti dal racconto) */
+export const passiPer = (d) => PASSI.filter((p) => (!p.quando || p.quando(d)) && !(d._skip || []).includes(p.id));
+
+/** dopo il racconto: i passi a cui il testo ha già risposto e che si possono saltare */
+export function passiCoperti(d, found = {}) {
+  const probe = JSON.parse(JSON.stringify(d));
+  const facoltativi = {
+    nome: true, condizioni: !!found.salute, dolori: !!found.salute, vita: !!d.misure?.vita,
+    pesoObiettivo: !!d.pesoObiettivo, scheda: !!d.schedaPalestra, nocibi: false, sogni: false, zone: false, riepilogo: false,
+  };
+  return PASSI.filter((p) => (!p.quando || p.quando(probe)) && (p.id in facoltativi ? facoltativi[p.id] : !p.errore(probe, { slotError: () => null }))).map((p) => p.id);
+}
 
 /** valori di partenza del percorso */
 export const BOZZA_VUOTA = () => ({

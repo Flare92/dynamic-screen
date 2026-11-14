@@ -476,12 +476,15 @@ export function weekMenu(p, n) {
       totals(target);
     }
     // se con le aggiunte si supera il fabbisogno, togli carboidrati dal pasto più ricco
-    let over = meals.reduce((a, x) => a + x.kcal, 0) - n.kcal * 1.04;
+    let over = meals.reduce((a, x) => a + x.kcal, 0) - n.kcal * 1.02;
     for (const m of [...meals].filter((x) => !x.fuori).sort((a, b2) => b2.kcal - a.kcal)) {
       for (const x of m.items) {
         const L = LIMITS[x.food];
-        if (over <= 20 || !L || !['pasta', 'riso', 'farro', 'couscous', 'pane', 'patate', 'avena'].includes(x.food)) continue;
-        const take = Math.min(Math.max(0, x.grams - L[0]), Math.round(((over / FOOD[x.food][1]) * 100) / 10) * 10);
+        // prima i carboidrati fino alla porzione minima, poi i condimenti
+        const min = { olio: 5, noci: 10, arachidi: 10, avocado: 30 }[x.food] ?? (['pasta', 'riso', 'farro', 'couscous', 'pane', 'patate', 'avena'].includes(x.food) ? L?.[0] : null);
+        if (over <= 20 || min == null || x.plus) continue;
+        const step = SMALL.includes(x.food) ? 5 : 10;
+        const take = Math.min(Math.max(0, x.grams - min), Math.round(((over / FOOD[x.food][1]) * 100) / step) * step);
         if (take > 0) { Object.assign(x, mkItem(x.food, x.grams - take, ex)); over -= (FOOD[x.food][1] * take) / 100; }
       }
       totals(m);
