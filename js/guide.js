@@ -1,8 +1,10 @@
 // Guida tecnica dettagliata di ogni esercizio.
-// mm: muscoli principali (usati anche per illuminarli sul manichino 3D)
+// mm: muscoli principali
 // perche: a cosa serve · setup: posizione di partenza · passi: esecuzione
 // respiro · ritmo: tempo di esecuzione · errori: errori comuni
 // facile / difficile: regressione e progressione · sicurezza: avvertenze
+
+import { GX } from './guide-extra.js';
 
 const G = {
   // =========================== RISCALDAMENTO ===========================
@@ -1181,6 +1183,8 @@ const G = {
     sicurezza: 'Vicino a un muro.',
   },
 };
+
+Object.assign(G, GX);
 
 export function guideFor(id) {
   return G[id] || null;

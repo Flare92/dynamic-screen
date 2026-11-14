@@ -1,7 +1,8 @@
-// Allenamento guidato a schermo intero: manichino 3D, timer, serie, recuperi, voce.
+// Allenamento guidato a schermo intero: foto dell'esercizio, timer, serie, recuperi, voce.
 
 import { guideFor, MUSCLE_LABELS } from './guide.js';
-import { ICON, load3D, beep, speak, haptic, burst } from './fx.js';
+import { ICON, beep, speak, haptic, burst } from './fx.js';
+import { demoHTML, handleDemoClick } from './demo.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -65,7 +66,7 @@ export function openPlayer(session, opts) {
   const host = document.getElementById('player');
   P = {
     session, steps, keys, opts, host, idx: 0, left: 0, running: false, phase: 'idle',
-    viewer: null, shownEx: null, tick: null, start: Date.now(), done: new Set(opts.doneKeys || []),
+    shownEx: null, tick: null, start: Date.now(), done: new Set(opts.doneKeys || []),
     voice: (() => { try { return localStorage.getItem('ritmo.voice') !== '0'; } catch { return true; } })(),
     cueI: 0, cueT: 0, wake: null, fbDone: new Set(),
   };
@@ -73,7 +74,7 @@ export function openPlayer(session, opts) {
     <div class="p-top">
       <div class="p-bars">${keys.map((k) => `<i data-k="${k}"></i>`).join('')}</div>
       <div class="p-head">
-        <span class="chip cyan live" id="p-block"><i></i></span>
+        <span class="chip" id="p-block"></span>
         <div class="row">
           <span class="mono small muted" id="p-count"></span>
           <button class="icon-btn" data-p="voice" aria-label="Voce">${P.voice ? ICON.sound : ICON.mute}</button>
@@ -81,7 +82,7 @@ export function openPlayer(session, opts) {
         </div>
       </div>
     </div>
-    <div class="p-stage"><div class="viewer" id="p-viewer"><div class="fallback"><div class="loader"></div></div></div></div>
+    <div class="p-stage" id="p-viewer"></div>
     <div class="p-info">
       <p class="kicker" id="p-kicker"></p>
       <h2 id="p-name" style="margin-top:6px"></h2>
@@ -101,16 +102,6 @@ export function openPlayer(session, opts) {
   document.body.classList.add('locked');
   host.onclick = onClick;
   try { navigator.wakeLock?.request('screen').then((w) => { if (P) P.wake = w; }).catch(() => {}); } catch { /* */ }
-
-  load3D().then((m) => {
-    if (!P) return;
-    const el = document.getElementById('p-viewer');
-    if (!m.webglAvailable()) { el.innerHTML = ''; return; }
-    el.innerHTML = '';
-    P.viewer = m.createViewer(el, {});
-    P.shownEx = null;
-    paint();
-  }).catch(() => { const el = document.getElementById('p-viewer'); if (el) el.innerHTML = ''; });
 
   enter(0);
   P.tick = setInterval(tick, 250);
@@ -209,7 +200,7 @@ function paint(light = false) {
   const workSteps = P.steps.filter((x) => x.type === 'work');
   const pos = workSteps.indexOf(work) + 1;
   $('p-count').textContent = `${pos}/${workSteps.length}`;
-  $('p-block').innerHTML = `<i></i>${s.type === 'rest' ? 'Recupero' : esc(s.block)}`;
+  $('p-block').textContent = s.type === 'rest' ? 'Recupero' : s.block;
   $('p-kicker').textContent = s.type === 'rest' ? 'Prossimo esercizio' : (s.round ? `Giro ${s.set} di ${s.sets}` : s.sets > 1 ? `Serie ${s.set} di ${s.sets}` : g ? g.mm.slice(0, 3).map((m) => MUSCLE_LABELS[m]).join(' · ') : '');
   $('p-name').textContent = work.name;
   $('p-dose').textContent = s.type === 'rest' ? '' : (s.reps ? `${s.reps} ripetizioni` : s.round ? '40 s di lavoro' : '');
@@ -223,8 +214,8 @@ function paint(light = false) {
       <div class="exfb">${[['facile', 'Facile'], ['giusto', 'Giusto'], ['duro', 'Duro'], ['dolore', 'Dolore']].map(([k, l]) => `<button data-p="exfb" data-fb="${k}" data-id="${prev.id}">${l}</button>`).join('')}</div>`;
   } else fbEl.innerHTML = '';
 
-  if (P.viewer && P.shownEx !== work.id) {
-    P.viewer.setMotion(work.id, g ? g.mm : []);
+  if (P.shownEx !== work.id) {
+    $('p-viewer').innerHTML = demoHTML(work.id);
     P.shownEx = work.id;
   }
 }
@@ -235,15 +226,14 @@ function finish() {
   const mins = Math.max(1, Math.round((Date.now() - P.start) / 60000));
   const sets = P.steps.filter((s) => s.type === 'work').length;
   speak('Allenamento completato. Grande lavoro!', P.voice);
-  P.viewer?.dispose(); P.viewer = null;
   P.host.querySelector('.p-stage').remove();
   P.host.querySelector('.p-info').remove();
   P.host.querySelector('.p-ctrl').remove();
   const f = document.createElement('div');
   f.className = 'finish';
   f.innerHTML = `
-    <span class="chip volt"><i></i>Completato</span>
-    <div class="big grad-text">${mins}′</div>
+    <span class="chip ok">Completato</span>
+    <div class="big">${mins}′</div>
     <p class="muted">${P.keys.length} esercizi · ${sets} serie e intervalli</p>
     <h2 style="margin-top:12px">Com’è andata?</h2>
     <div class="feedback" style="width:min(420px,100%)">
@@ -259,7 +249,6 @@ function finish() {
 export function closePlayer() {
   if (!P) return;
   clearInterval(P.tick);
-  P.viewer?.dispose();
   try { P.wake?.release(); } catch { /* */ }
   try { speechSynthesis.cancel(); } catch { /* */ }
   P.host.hidden = true; P.host.innerHTML = '';
@@ -270,6 +259,7 @@ export function closePlayer() {
 }
 
 function onClick(e) {
+  if (handleDemoClick(e)) return;
   const t = e.target.closest('[data-p]');
   if (!t || !P) return;
   const a = t.dataset.p;
@@ -300,7 +290,7 @@ function onClick(e) {
     P.opts.onExFeedback?.(t.dataset.id, t.dataset.fb);
     haptic(15);
     const msg = { facile: 'La prossima volta sarà più impegnativo', giusto: 'Perfetto, resta così', duro: 'La prossima volta sarà più leggero', dolore: 'Lo sostituisco dalla prossima sessione' }[t.dataset.fb];
-    document.getElementById('p-exfb').innerHTML = `<p class="small" style="color:var(--volt);margin-top:8px">✓ ${msg}</p>`;
+    document.getElementById('p-exfb').innerHTML = `<p class="small ok-text" style="margin-top:8px">✓ ${msg}</p>`;
     return;
   }
   if (a === 'fb') {
