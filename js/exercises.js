@@ -119,6 +119,53 @@ export const EXERCISES = [
   // ---------- FORZA: POLPACCI ----------
   E('k_calf', 'Sollevamenti sui polpacci', 'strength', { pat: 'calf', how: 'Sali sulle punte lentamente, pausa in alto, scendi in 2 secondi. Appoggiati se serve.' }),
 
+  // ---------- ADDOME (lavoro mirato) ----------
+  E('c_vacuum', 'Vacuum addominale', 'strength', { pat: 'core', unit: 'sec', how: 'Espira tutta l’aria e tira l’ombelico verso la colonna, tieni la posizione respirando poco. Attiva il trasverso, il muscolo che tiene piatta la pancia.' }),
+  E('c_heel', 'Tocchi ai talloni', 'strength', { pat: 'core', tags: ['supino'], how: 'Supino a ginocchia piegate, spalle appena sollevate: tocca alternando il tallone destro e sinistro.' }),
+  E('c_reverse', 'Crunch inverso', 'strength', { pat: 'core', tags: ['supino'], how: 'Supino, ginocchia a 90°: stacca il bacino da terra portando le ginocchia verso il petto, scendi piano.' }),
+  E('c_bike', 'Bicicletta a terra', 'strength', { pat: 'core', lvl: 2, contra: ['schiena'], tags: ['supino', 'flessioneCarico'], how: 'Supino, mani alle tempie: porta il gomito verso il ginocchio opposto alternando, senza tirare il collo.' }),
+  E('c_mountain', 'Mountain climber', 'strength', { pat: 'core', lvl: 2, unit: 'sec', how: 'In appoggio sulle mani, porta le ginocchia al petto alternandole, bacino basso e fermo.' }),
+  E('c_russian', 'Russian twist', 'strength', { pat: 'core', lvl: 2, contra: ['schiena'], tags: ['flessioneCarico'], how: 'Seduto con il busto inclinato indietro, ruota le spalle da un lato all’altro con la schiena lunga.' }),
+  E('c_cable', 'Crunch ai cavi', 'strength', { pat: 'core', eq: ['palestra'], lvl: 2, contra: ['schiena'], tags: ['flessioneCarico'], how: 'In ginocchio davanti al cavo alto, corda ai lati della testa: chiudi il busto verso le ginocchia usando l’addome.' }),
+  E('c_legraise', 'Sollevamento gambe alla sbarra', 'strength', { pat: 'core', eq: ['sbarra', 'palestra'], lvl: 3, contra: ['spalle', 'schiena'], how: 'Appeso alla sbarra, porta le ginocchia (o le gambe tese) verso il petto senza dondolare.' }),
+
+  // ---------- BRACCIA ----------
+  E('a_curl', 'Curl con manubri', 'strength', { pat: 'bicipiti', eq: ['manubri'], how: 'Gomiti fermi ai fianchi, sali ruotando i palmi verso l’alto, scendi in 2 secondi.' }),
+  E('a_hammer', 'Curl a martello', 'strength', { pat: 'bicipiti', eq: ['manubri'], how: 'Come il curl, ma con i palmi che si guardano per tutto il movimento.' }),
+  E('a_curl_bil', 'Curl con bilanciere', 'strength', { pat: 'bicipiti', eq: ['palestra'], lvl: 2, how: 'Presa larga come le spalle, gomiti fermi, niente slancio con la schiena.' }),
+  E('a_curl_cavo', 'Curl al cavo basso', 'strength', { pat: 'bicipiti', eq: ['palestra'], how: 'Barra al cavo basso, gomiti ai fianchi: il cavo tiene il muscolo in tensione per tutto il movimento.' }),
+  E('a_pushdown', 'Push down ai cavi', 'strength', { pat: 'tricipiti', eq: ['palestra'], how: 'Gomiti incollati ai fianchi, spingi la barra verso il basso fino a distendere le braccia.' }),
+  E('a_kick', 'Kick back con manubrio', 'strength', { pat: 'tricipiti', eq: ['manubri'], how: 'Busto inclinato, gomito alto e fermo: distendi l’avambraccio all’indietro. Per lato.' }),
+  E('a_ext', 'Estensioni sopra la testa con manubrio', 'strength', { pat: 'tricipiti', eq: ['manubri'], contra: ['spalle'], how: 'Un manubrio a due mani sopra la testa, gomiti vicini: piega e distendi senza allargarli.' }),
+  E('a_skull', 'French press con manubri', 'strength', { pat: 'tricipiti', eq: ['palestra'], lvl: 2, tags: ['supino'], how: 'Sdraiato sulla panca, braccia verticali: piega solo i gomiti portando i manubri ai lati della testa.' }),
+
+  // ---------- GAMBE E GLUTEI (complementari) ----------
+  E('s_hack', 'Hack squat', 'strength', { pat: 'squat', eq: ['palestra'], lvl: 2, contra: ['ginocchia'], how: 'Schiena appoggiata, piedi a metà pedana: scendi fino a cosce parallele e spingi senza bloccare le ginocchia.' }),
+  E('s_plie', 'Squat sumo con manubrio', 'strength', { pat: 'squat', eq: ['manubri'], how: 'Piedi larghi e punte aperte, manubrio tra le gambe: scendi con il busto dritto. Lavora interno coscia e glutei.' }),
+  E('s_ext', 'Leg extension', 'strength', { pat: 'quad_iso', eq: ['palestra'], contra: ['ginocchia'], how: 'Schiena appoggiata, distendi le ginocchia fino in alto, pausa di 1 secondo, scendi piano.' }),
+  E('h_curl', 'Leg curl', 'strength', { pat: 'ham_iso', eq: ['palestra'], how: 'Bacino fermo sul cuscino, porta i talloni verso i glutei e ritorna in 3 secondi.' }),
+  E('h_hyper', 'Iperestensioni alla panca', 'strength', { pat: 'lombari', eq: ['palestra'], contra: ['schiena'], how: 'Bacino sul cuscino, scendi con la schiena lunga e risali fino alla linea del corpo, non oltre.' }),
+  E('g_abd_piedi', 'Slanci laterali in piedi', 'strength', { pat: 'glutei', how: 'In piedi con una mano su un appoggio, solleva la gamba di lato senza inclinare il busto. Per lato.' }),
+  E('g_cavo', 'Slanci posteriori al cavo', 'strength', { pat: 'glutei', eq: ['palestra'], how: 'Cavigliera al cavo basso, busto leggermente inclinato: spingi la gamba indietro stringendo il gluteo. Per lato.' }),
+  E('g_abd_mac', 'Abductor machine', 'strength', { pat: 'glutei', eq: ['palestra'], how: 'Schiena appoggiata, apri le ginocchia contro i cuscinetti, pausa di 1 secondo, chiudi piano.' }),
+  E('g_add_mac', 'Adductor machine', 'strength', { pat: 'adduttori', eq: ['palestra'], how: 'Chiudi le ginocchia contro i cuscinetti e riapri in 3 secondi, senza rimbalzare.' }),
+
+  // ---------- PETTO, SPALLE E SCHIENA (complementari) ----------
+  E('p_incl', 'Panca inclinata con manubri', 'strength', { pat: 'push_h', eq: ['palestra'], lvl: 2, contra: ['spalle'], how: 'Panca a 30°, manubri ai lati del petto: spingi in alto e scendi in 2 secondi.' }),
+  E('p_fly', 'Croci con manubri', 'strength', { pat: 'petto_iso', eq: ['palestra'], lvl: 2, contra: ['spalle'], tags: ['supino'], how: 'Sdraiato sulla panca, gomiti morbidi: apri le braccia ad arco fino all’altezza del petto e richiudi.' }),
+  E('p_pec', 'Pec deck', 'strength', { pat: 'petto_iso', eq: ['palestra'], how: 'Schiena appoggiata, chiudi le braccia davanti al petto e riapri piano senza andare oltre la linea delle spalle.' }),
+  E('p_cross', 'Croci ai cavi', 'strength', { pat: 'petto_iso', eq: ['palestra'], lvl: 2, how: 'Un passo avanti, gomiti morbidi: porta le maniglie davanti al bacino disegnando un arco.' }),
+  E('v_machine', 'Shoulder press alla macchina', 'strength', { pat: 'push_v', eq: ['palestra'], contra: ['spalle'], how: 'Schiena appoggiata, spingi le maniglie sopra la testa senza inarcare, scendi fino all’altezza delle orecchie.' }),
+  E('v_decline', 'Piegamenti con piedi rialzati', 'strength', { pat: 'push_v', lvl: 3, contra: ['spalle', 'ipertensione'], tags: ['testaGiu'], how: 'Piedi su una sedia o un gradino, corpo in linea: il peso si sposta su spalle e parte alta del petto.' }),
+  E('v_front', 'Alzate frontali con manubri', 'strength', { pat: 'spalle_iso', eq: ['manubri'], contra: ['spalle'], how: 'Solleva le braccia tese davanti a te fino all’altezza delle spalle, senza slancio.' }),
+  E('r_2man', 'Rematore con due manubri', 'strength', { pat: 'pull_h', eq: ['manubri'], lvl: 2, contra: ['schiena'], how: 'Busto inclinato a 45° con schiena piatta, tira i gomiti verso i fianchi stringendo le scapole.' }),
+  E('r_pullapart', 'Aperture con elastico', 'strength', { pat: 'post_iso', eq: ['elastici', 'palestra'], how: 'Elastico teso davanti al petto, apri le braccia stringendo le scapole. Ottimo per la postura.' }),
+  E('r_rev', 'Alzate posteriori con manubri', 'strength', { pat: 'post_iso', eq: ['manubri'], how: 'Busto inclinato in avanti, apri le braccia di lato con i gomiti morbidi stringendo le scapole.' }),
+  E('r_face', 'Face pull', 'strength', { pat: 'post_iso', eq: ['palestra'], how: 'Corda al cavo alto, tira verso il viso aprendo i gomiti e ruotando i pugni all’indietro.' }),
+  E('r_rev_mac', 'Reverse fly alla macchina', 'strength', { pat: 'post_iso', eq: ['palestra'], how: 'Petto contro lo schienale, apri le braccia all’indietro fino alla linea delle spalle.' }),
+  E('t_close', 'Lat machine presa stretta', 'strength', { pat: 'pull_v', eq: ['palestra'], how: 'Presa stretta, busto leggermente indietro: tira al petto portando i gomiti ai fianchi.' }),
+  E('t_straight', 'Pulldown a braccia tese', 'strength', { pat: 'dorso_iso', eq: ['palestra'], how: 'In piedi davanti al cavo alto, braccia quasi tese: porta la barra alle cosce usando i dorsali.' }),
+
   // ---------- CARDIO ----------
   E('x_cammino', 'Camminata veloce', 'cardio', { how: 'Passo svelto, braccia attive. All’aperto o sul posto/tapis.' }),
   E('x_basso', 'Cardio a basso impatto a corpo libero', 'cardio', { how: 'Alterna 1 minuto ciascuno: marcia con ginocchia alte, step-touch, pugni in avanti, talloni ai glutei camminati.' }),

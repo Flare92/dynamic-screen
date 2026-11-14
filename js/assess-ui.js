@@ -1,9 +1,10 @@
-// Valutazione guidata: misure + test fisici con dimostrazione 3D e strumenti integrati
+// Valutazione guidata: misure + test fisici con foto dimostrative e strumenti integrati
 // (cronometro, conto alla rovescia, metronomo per lo step test, conteggio del polso).
 
 import { TESTS, MEASURES, AREAS } from './assessment.js';
 import { guideFor } from './guide.js';
-import { ICON, load3D, beep, haptic, speak } from './fx.js';
+import { ICON, beep, haptic, speak } from './fx.js';
+import { demoHTML, handleDemoClick } from './demo.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const AREA_LABEL = Object.fromEntries(AREAS.map((a) => [a.id, a.label]));
@@ -19,7 +20,7 @@ export function startAssessment(opts) {
     ...opts,
     screen: 'intro', i: 0,
     vals: {}, meas: {},
-    tool: null, viewer: null, shown: null,
+    tool: null,
   };
 }
 export const assessmentActive = () => !!S;
@@ -130,7 +131,7 @@ function testScreen() {
   ${top(label, pct)}
   <section class="stack">
     <div class="reveal"><p class="kicker">${AREA_LABEL[t.area]}</p><h1 style="margin-top:6px">${t.title}</h1></div>
-    <div class="test-stage reveal" style="--i:1"><div class="viewer" id="as-viewer"><div class="fallback"><div class="loader"></div></div></div></div>
+    <div class="test-stage reveal" style="--i:1">${demoHTML(t.ex)}</div>
     <div class="card reveal" style="--i:2">
       <p class="sub-h" style="margin-top:0">Preparazione</p>
       <ol class="steps-list">${t.setup.map((x) => `<li>${esc(x)}</li>`).join('')}</ol>
@@ -150,7 +151,7 @@ function doneScreen() {
   const n = Object.keys(S.vals).filter((k) => !k.endsWith('Var')).length;
   return `
   <section class="finish-screen stack-lg">
-    <span class="chip volt reveal"><i></i>Valutazione completata</span>
+    <span class="chip ok reveal">Valutazione completata</span>
     <h1 class="reveal" style="--i:1">${n} test registrati</h1>
     <p class="muted reveal" style="--i:2">Sto ricalcolando livelli, dosi, esercizi correttivi e traguardi sui tuoi risultati.</p>
     <button class="btn primary wide reveal" style="--i:3" data-as="finish">Vedi il tuo punto di partenza</button>
@@ -161,25 +162,11 @@ const fmtS = (s) => (Math.round(s * 10) / 10).toLocaleString('it-IT', { minimumF
 const fmtMin = (s) => { const x = Math.max(0, Math.ceil(s)); return `${Math.floor(x / 60)}:${String(x % 60).padStart(2, '0')}`; };
 
 // ------------------------------------------------------------------
-// Montaggio 3D e strumenti
+// Strumenti
 // ------------------------------------------------------------------
 
-export async function mountAssessment() {
-  if (!S || S.screen !== 'test') { disposeViewer(); return; }
-  const t = list()[S.i];
-  if (reason(t)) { disposeViewer(); return; }
-  const el = document.getElementById('as-viewer');
-  if (!el) return;
-  try {
-    const m = await load3D();
-    if (!S || !document.getElementById('as-viewer')) return;
-    if (!m.webglAvailable()) { el.innerHTML = ''; return; }
-    disposeViewer();
-    el.innerHTML = '';
-    S.viewer = m.createViewer(el, { exercise: t.ex, muscles: guideFor(t.ex)?.mm || [] });
-  } catch { el.innerHTML = ''; }
-}
-function disposeViewer() { if (S?.viewer) { S.viewer.dispose(); S.viewer = null; } }
+export function mountAssessment() { /* le foto non richiedono montaggio */ }
+function disposeViewer() { /* compatibilità */ }
 
 function stopTools() {
   if (S?.tool?.int) clearInterval(S.tool.int);
@@ -268,6 +255,7 @@ function startStepTest(t, rerender) {
 // ------------------------------------------------------------------
 
 export function handleAssessmentClick(e, rerender) {
+  if (handleDemoClick(e)) return true;
   if (!S) return false;
   const varBtn = e.target.closest('[data-as-var] button');
   if (varBtn) {

@@ -1,3 +1,5 @@
+// Ritmo – interfaccia: percorso guidato dal coach, Oggi, Allenamento, Alimentazione, Progressi, Profilo.
+
 import {
   CONDITIONS, GOALS, EQUIPMENT, WEEKDAYS, WEEKDAYS_LONG, TYPE_KIND,
   generatePlan, analyzeProgress, expectedWeight, buildSession, derive, allowedExercises, alternativesFor,
@@ -5,17 +7,21 @@ import {
 } from './engine.js';
 import { EXERCISES } from './exercises.js';
 import { guideFor, MUSCLE_LABELS } from './guide.js';
-import { ICON, load3D, countUp, burst, haptic } from './fx.js';
+import { ICON, countUp, burst, haptic } from './fx.js';
 import { openSheet, closeSheet } from './sheet.js';
 import { openPlayer } from './player.js';
 import {
-  MEASURES, PAIN_REGIONS, PAIN_LEVELS, AREAS, LEVEL_LABEL, TEST_BY_ID,
+  PAIN_REGIONS, AREAS, LEVEL_LABEL, TEST_BY_ID,
   computeProfile, precision, buildKpis, metric, kpiProgress,
 } from './assessment.js';
-import { QUESTIONS, EXAMPLE, DIETS, parseNarrative, coverage, analyzeWithClaude, mergeAI } from './narrative.js';
+import { QUESTIONS, EXAMPLE, parseNarrative, coverage, analyzeWithClaude, mergeAI } from './narrative.js';
 import { DIET_LABEL } from './diet.js';
 import { parseGymList, reviewGym, VERDICT_LABEL, VERDICT_COUNT, GYM_PICKS, lineIsPick } from './gymreview.js';
 import { startAssessment, renderAssessment, mountAssessment, handleAssessmentClick, assessmentActive, cancelAssessment } from './assess-ui.js';
+import { SOGNI, ZONE_LABEL, goalFromSogni } from './indagine.js';
+import { SEZIONI, passiPer, passiCoperti, BOZZA_VUOTA } from './flow.js';
+import { thumbHTML, warmDemos } from './demo.js';
+import { demoFor } from './demos.js';
 
 // ==================================================================
 // Stato (salvato solo sul dispositivo)
@@ -35,11 +41,14 @@ function save() {
 }
 
 let state = load();
-let draft = null;
-let wizardStep = 0;
+let draft = null;        // bozza del profilo durante il percorso guidato
+let flowIdx = 0;         // passo corrente del percorso
+let flowEdit = false;    // si sta modificando un profilo esistente
+let justFinished = false;
 let selectedDay = null;
+let menuDay = null;
 let showFeedback = false;
-let libFilter = 'tutti';
+let libFilter = 'perte';
 let libQuery = '';
 
 const $app = document.getElementById('app');
@@ -47,6 +56,14 @@ const today = () => toISO(new Date());
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = (n, d = 0) => Number(n).toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d });
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+/** cambio di schermata con dissolvenza, dove il browser lo permette */
+function transition(go) {
+  if (!document.startViewTransition || reduced()) { go(); return; }
+  const t = document.startViewTransition(go);
+  // una transizione interrotta da quella successiva non è un errore
+  [t.ready, t.finished, t.updateCallbackDone].forEach((p) => p?.catch(() => {}));
+}
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
 function currentWeek() {
   return Math.max(1, Math.floor(daysBetween(fromISO(state.planStart), new Date()) / 7) + 1);
@@ -65,12 +82,17 @@ function gymReview(text = state.profile?.schedaPalestra) {
   const list = parseGymList(text);
   return list.length ? reviewGym(state.profile, list, planCtx()) : null;
 }
+let planCache = null;
 function getPlan(week = currentWeek()) {
-  return generatePlan(state.profile, {
+  const key = `${week}|${state.planStart}|${state.calorieAdjust}|${JSON.stringify([state.profile, state.assess.length, state.swaps, state.excluded, state.exAdj])}`;
+  if (planCache?.key === key) return planCache.plan;
+  const plan = generatePlan(state.profile, {
     startISO: state.planStart, week, calorieAdjust: state.calorieAdjust,
     assess: mergedAssess(), swaps: state.swaps, excluded: state.excluded, exAdj: state.exAdj,
     favorites: hasGym() ? gymReview()?.keep : undefined,
   });
+  planCache = { key, plan };
+  return plan;
 }
 const precisionNow = () => precision(state.profile, mergedAssess(), { feedbacks: state.fbCount || 0, retests: Math.max(0, state.assess.length - 1), excludeTests: Object.values(TEST_BY_ID).filter((t) => t.when(state.profile, mergedAssess().results)).map((t) => t.id) });
 const daysSinceAssess = () => (state.assess.length ? daysBetween(fromISO(state.assess[state.assess.length - 1].date), new Date()) : null);
@@ -78,48 +100,64 @@ function dayLog(iso) {
   if (!state.log[iso]) state.log[iso] = { done: false, items: [], habits: {} };
   return state.log[iso];
 }
+function sessionFor(plan, iso) {
+  const from = state.log[iso]?.sessionFrom;
+  const wd = from ?? weekdayIndex(fromISO(iso));
+  return { session: plan.schedule[wd].session, moved: from !== undefined && from !== null };
+}
+
+// domande dell'indagine a cui un profilo (anche creato con una versione precedente) non ha ancora risposto
+function domandeMancanti(p = state.profile) {
+  if (!p) return [];
+  const d = JSON.parse(JSON.stringify(p));
+  return passiPer(d).filter((s) => s.id !== 'nome' && s.id !== 'scheda' && (s.errore(d, flowHelpers) || ({ sogni: !p.sogni?.length, accumulo: !p.accumulo, dieta: !p.pasti && false }[s.id])));
+}
 
 // ==================================================================
 // Tab bar e router
 // ==================================================================
 
-const TABS = [['oggi', 'Oggi', ICON.today], ['piano', 'Piano', ICON.plan], ['esercizi', 'Esercizi', ICON.lib], ['progressi', 'Progressi', ICON.progress], ['profilo', 'Profilo', ICON.profile]];
+const TAB_ICON = {
+  oggi: ICON.today,
+  allenamento: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 7v10M17.5 7v10M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/></svg>',
+  cibo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v7a2.5 2.5 0 0 0 5 0V3M9.5 3v18M17 3c-1.7 1.2-2.5 3.6-2.5 6.5 0 1.9.9 3 2.5 3.3V21"/></svg>',
+  progressi: ICON.progress,
+};
+const TABS = [['oggi', 'Oggi'], ['allenamento', 'Allenamento'], ['cibo', 'Alimentazione'], ['progressi', 'Progressi']];
 const $tabbar = document.getElementById('tabbar');
-$tabbar.innerHTML = TABS.map(([id, l, ic]) => `<a href="#/${id}" data-tab="${id}">${ic}<span>${l}</span></a>`).join('');
+$tabbar.innerHTML = TABS.map(([id, l]) => `<a href="#/${id}" data-tab="${id}">${TAB_ICON[id]}<span>${l}</span></a>`).join('');
 
-let heroViewer = null;
-let heroTimer = null;
+const ALIAS = { piano: 'allenamento', setup: 'inizio', capito: 'perche', alimentazione: 'cibo' };
+const NO_PROFILE = ['benvenuto', 'inizio', 'racconto'];
+const NO_TABS = ['benvenuto', 'inizio', 'racconto', 'valutazione', 'palestra', 'perche', 'partenza', 'esercizi', 'profilo'];
+const TAB_OF = { partenza: 'progressi', esercizi: 'allenamento', palestra: 'allenamento', perche: 'allenamento' };
 
 function route() {
-  const hash = location.hash.replace('#/', '') || 'oggi';
-  if (!state.profile && !['setup', 'benvenuto', 'racconto', 'capito'].includes(hash)) { location.replace('#/benvenuto'); }
-  if (hash === 'capito' && !draft) { location.replace('#/racconto'); return; }
-  const page = state.profile ? (hash === 'benvenuto' ? 'oggi' : hash) : (['setup', 'racconto', 'capito'].includes(hash) ? hash : 'benvenuto');
-  const withTabs = !['setup', 'benvenuto', 'valutazione', 'racconto', 'capito', 'palestra'].includes(page);
+  let hash = location.hash.replace('#/', '') || 'oggi';
+  hash = ALIAS[hash] || hash;
+  if (!state.profile && !NO_PROFILE.includes(hash)) { location.replace('#/benvenuto'); hash = 'benvenuto'; }
+  const page = state.profile && hash === 'benvenuto' ? 'oggi' : hash;
+  const withTabs = !NO_TABS.includes(page);
   if (page !== 'valutazione' && assessmentActive()) cancelAssessment();
   if (page === 'valutazione' && !assessmentActive()) beginAssessment();
   $tabbar.hidden = !withTabs;
   document.body.classList.toggle('no-tabs', !withTabs);
-  $tabbar.querySelectorAll('a').forEach((a) => a.classList.toggle('on', a.dataset.tab === page));
+  $tabbar.querySelectorAll('a').forEach((a) => a.classList.toggle('on', a.dataset.tab === (TAB_OF[page] || page)));
 
-  if (page !== 'benvenuto') disposeHero();
-  if (page === 'setup' && !draft) initDraft(!!state.profile);
-  const views = { benvenuto: viewWelcome, setup: viewWizard, oggi: viewToday, piano: viewPlan, esercizi: viewLibrary, progressi: viewProgress, profilo: viewProfile, valutazione: renderAssessment, partenza: viewStart, racconto: viewStory, capito: viewReview, palestra: viewGym };
+  if (page === 'inizio' && !draft) startFlow(!!state.profile);
+  const views = { benvenuto: viewWelcome, inizio: viewFlow, oggi: viewToday, allenamento: viewTraining, cibo: viewFood, esercizi: viewLibrary, progressi: viewProgress, profilo: viewProfile, valutazione: renderAssessment, partenza: viewStart, racconto: viewStory, perche: viewWhy, palestra: viewGym };
   $app.innerHTML = (views[page] || viewToday)();
-  if (page === 'setup') bindWizardInputs();
+  $app.dataset.page = page;
+  if (page === 'inizio') bindFlowInputs();
   if (page === 'valutazione') mountAssessment();
   if (page === 'racconto') bindStory();
-  if (page === 'capito') bindWizardInputs();
   if (page === 'palestra') bindGym();
-  if (page === 'benvenuto') mountHero();
   countUp($app);
 }
 
 window.addEventListener('hashchange', () => {
   closeSheet();
-  const go = () => { window.scrollTo(0, 0); route(); };
-  if (document.startViewTransition && !reduced()) document.startViewTransition(go);
-  else go();
+  transition(() => { window.scrollTo(0, 0); route(); });
 });
 
 function rerender() {
@@ -130,50 +168,213 @@ function rerender() {
 
 const R = (i) => `reveal" style="--i:${i}`; // classe di ingresso sfalsato
 
-// ==================================================================
-// Benvenuto con manichino 3D
-// ==================================================================
+// ------------------------------------------------------------------
+// Pezzi ricorrenti
+// ------------------------------------------------------------------
 
-const HERO_LOOP = ['s_squat', 'x_corsa', 'p_classici', 'h_rdl', 'w_jj', 'l_affind'];
+const COACH_AVA = '<span class="coach-ava" aria-hidden="true"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="var(--accent)"/><circle cx="20" cy="16" r="6.5" fill="#fff"/><path d="M7.5 34c2-6.5 6.8-9.5 12.5-9.5S30.500 27.5 32.500 34" fill="#fff"/></svg></span>';
+/** il coach che parla: una frase, in prima persona */
+const coach = (text, cls = '') => `<div class="coach ${cls}">${COACH_AVA}<p>${text}</p></div>`;
+const backBtn = (href) => (href ? `<a class="icon-btn" href="${href}" aria-label="Indietro">${ICON.prev}</a>` : `<button class="icon-btn" onclick="history.back()" aria-label="Indietro">${ICON.prev}</button>`);
+/** intestazione delle schede principali, con l'accesso al profilo */
+function hdr(title, kicker = '') {
+  const ini = (state.profile?.nome || '').trim().charAt(0).toUpperCase();
+  return `<header class="hdr ${R(0)}"><div>${kicker ? `<p class="kicker">${kicker}</p>` : ''}<h1>${title}</h1></div>
+    <a class="avatar" href="#/profilo" aria-label="Profilo e impostazioni">${ini || ICON.profile}</a></header>`;
+}
+/** intestazione delle pagine interne, con il tasto indietro */
+const subHdr = (title, back, kicker = '') => `<header class="sub-hdr ${R(0)}">${backBtn(back)}<div>${kicker ? `<p class="kicker">${kicker}</p>` : ''}<h1>${title}</h1></div></header>`;
+const tips = (list) => list.map((f) => `<div class="tip"><span class="ti">${f.icon}</span><div><b>${esc(f.title)}</b><p class="small muted">${esc(f.text)}</p></div></div>`).join('');
+const LUOGO_LABEL = { palestra: 'In palestra', casa: 'A casa', aperto: 'All’aperto' };
+const KIND_LABEL = { forza: 'Forza', cardio: 'Cardio', mobilita: 'Mobilità' };
+const sessionIds = (s) => s.blocks.flatMap((b) => b.items.map((i) => i.id));
+
+// ==================================================================
+// Benvenuto
+// ==================================================================
 
 function viewWelcome() {
+  const pics = ['goblet_squat', 'one_arm_dumbbell_row', 'plank', 'dumbbell_lunges'];
   return `
   <section class="welcome">
-    <div class="welcome-stage"><div class="viewer" id="hero-viewer"></div></div>
-    <div class="brand ${R(0)}"><img src="icons/icon.svg" alt=""> RITMO</div>
-    <h1 class="${R(1)}">La tua routine,<br><span class="grad-text">costruita su di te.</span></h1>
-    <p class="muted ${R(2)}" style="font-size:17px">Corpo, salute, abitudini e tempo a disposizione: un piano che si adatta a te, con ogni esercizio in 3D e guidato passo passo.</p>
-    <div class="feat ${R(3)}">
-      <div><span class="fi">🧬</span><b>Su misura</b><span>Esclude ciò che non è adatto alla tua salute.</span></div>
-      <div><span class="fi">🧊</span><b>Esercizi in 3D</b><span>Ruotali, rallentali, guarda i muscoli.</span></div>
-      <div><span class="fi">⏱️</span><b>Guidato</b><span>Timer, serie, recuperi e voce.</span></div>
-      <div><span class="fi">📈</span><b>Si adatta</b><span>Corregge il piano con i tuoi progressi.</span></div>
-    </div>
-    <button class="btn primary wide ${R(4)}" data-action="start-story">✍️ Raccontami di te</button>
-    <button class="btn ghost wide ${R(4)}" data-action="start-setup" style="margin-top:-10px">Preferisco rispondere a domande guidate</button>
-    <p class="disclaimer ${R(5)}" style="margin-top:0">Dati salvati solo su questo dispositivo · Non sostituisce il parere medico</p>
+    <div class="welcome-pics ${R(0)}" aria-hidden="true">${pics.map((f, i) => `<img src="media/ex/${f}_${i % 2 ? 0 : 1}.webp" alt="">`).join('')}</div>
+    <div class="brand ${R(1)}"><img src="icons/icon.svg" alt=""> Ritmo</div>
+    <h1 class="${R(2)}">Il tuo personal trainer e il tuo nutrizionista, in tasca.</h1>
+    <p class="lead ${R(3)}">Prima ti ascolto, poi ti preparo un piano di allenamento e un menu fatti solo per te. E ti seguo giorno per giorno.</p>
+    <ul class="promises ${R(4)}">
+      <li><span>🩺</span>Parto da un’indagine vera: obiettivo, corpo, salute, abitudini.</li>
+      <li><span>📸</span>Ogni esercizio con foto reali e spiegazione passo passo.</li>
+      <li><span>🥗</span>Menu settimanale con le grammature, sui cibi che mangi.</li>
+    </ul>
+    <button class="btn primary wide ${R(5)}" data-action="start-flow">Iniziamo</button>
+    <button class="link ${R(5)}" data-action="start-story">Preferisco raccontarmi a parole mie</button>
+    <p class="disclaimer ${R(6)}">I tuoi dati restano su questo telefono · Non sostituisce il parere del medico</p>
   </section>`;
 }
 
-async function mountHero() {
-  try {
-    const m = await load3D();
-    const el = document.getElementById('hero-viewer');
-    if (!el || !m.webglAvailable()) return;
-    disposeHero();
-    let i = 0;
-    const g = (id) => guideFor(id)?.mm || [];
-    heroViewer = m.createViewer(el, { exercise: HERO_LOOP[0], muscles: g(HERO_LOOP[0]) });
-    heroTimer = setInterval(() => { i = (i + 1) % HERO_LOOP.length; heroViewer?.setMotion(HERO_LOOP[i], g(HERO_LOOP[i])); }, 5200);
-  } catch { /* 3D non disponibile */ }
+// ==================================================================
+// Percorso guidato dal coach
+// ==================================================================
+
+const seg = (name, opts, val) => `<div class="seg" data-name="${name}">${opts.map(([v, l]) => `<button type="button" data-value="${v}" class="${String(val) === String(v) ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+const chips = (name, opts, vals = []) => `<div class="chips" data-multi="${name}">${opts.map((o) => `<button type="button" data-value="${o.id}" class="${(vals || []).includes(o.id) ? 'on' : ''}">${esc(o.label)}</button>`).join('')}</div>`;
+const num = (name, label, val, attrs = '') => `<label class="field"><span>${label}</span><input type="number" inputmode="decimal" name="${name}" value="${val ?? ''}" ${attrs}></label>`;
+/** scelta singola a schede grandi: [valore, titolo, descrizione] */
+const opts = (name, list, val) => `<div class="opts" data-name="${name}">${list.map(([v, l, s]) => `<button type="button" data-value="${v}" class="${String(val) === String(v) ? 'on' : ''}"><b>${esc(l)}</b>${s ? `<small>${esc(s)}</small>` : ''}</button>`).join('')}</div>`;
+/** scelta multipla a schede con icona, con un numero massimo */
+const multi = (name, list, vals = [], max = 3, layout = '') => `<div class="picks ${layout}" data-multi="${name}" data-max="${max}">${list.map((o) => `<button type="button" data-value="${o.id}" class="${(vals || []).includes(o.id) ? 'on' : ''}"><span class="pi">${o.icon || ''}</span><b>${esc(o.label)}</b></button>`).join('')}</div>`;
+
+const slotTot = (d) => (d.sessioni || []).reduce((a, x) => ({ g: a.g + (x.giorni || 0), m: a.m + (x.giorni || 0) * x.minuti }), { g: 0, m: 0 });
+const weekTotalText = (d) => { const t = slotTot(d); return `In tutto: ${t.g} allenamenti e ${t.m} minuti a settimana${t.m < 150 ? '. Le camminate completano il resto.' : '.'}`; };
+const slotError = (d) => { const t = slotTot(d); return !t.g ? 'Indica almeno una sessione a settimana.' : t.g > 7 ? `In totale hai ${t.g} giorni: al massimo 7 a settimana.` : null; };
+const LUOGHI = [['palestra', 'Palestra'], ['casa', 'Casa'], ['aperto', 'All’aperto']];
+function slotEditor(d) {
+  const S = d.sessioni || [];
+  return `<div class="slots">${S.map((x, i) => `
+    <div class="slot">
+      <div class="row between"><b>${S.length > 1 ? `Sessione ${i + 1}` : 'Le tue sessioni'}</b>${S.length > 1 ? `<button type="button" class="link small" data-action="slot-del" data-i="${i}">Rimuovi</button>` : ''}</div>
+      <div class="seg" data-slot="${i}" data-field="luogo">${LUOGHI.map(([v, l]) => `<button type="button" data-value="${v}" class="${x.luogo === v ? 'on' : ''}">${l}</button>`).join('')}</div>
+      <p class="small muted" style="margin-top:12px">Giorni a settimana</p>
+      <div class="seg seg-days" data-slot="${i}" data-field="giorni">${[1, 2, 3, 4, 5, 6, 7].map((v) => `<button type="button" data-value="${v}" class="${x.giorni === v ? 'on' : ''}">${v}</button>`).join('')}</div>
+      <div class="row between" style="margin-top:12px"><span class="small muted">Durata di ogni sessione</span><b id="slotmin-${i}">${x.minuti} min</b></div>
+      <input type="range" min="10" max="120" step="5" name="slotmin_${i}" value="${x.minuti}" aria-label="Durata">
+    </div>`).join('')}</div>
+    ${S.length < 3 ? '<button type="button" class="btn soft wide" data-action="slot-add">+ Aggiungi un altro tipo di sessione</button>' : ''}
+    <p class="small muted" id="week-total">${weekTotalText(d)}</p>`;
 }
-function disposeHero() {
-  clearInterval(heroTimer); heroTimer = null;
-  heroViewer?.dispose(); heroViewer = null;
+/** cosa ho capito dal racconto: ogni riga porta alla domanda corrispondente */
+function recap(d) {
+  const row = (step, label, value) => (value ? `<button type="button" class="set-row" data-action="flow-jump" data-step="${step}"><span class="grow"><span class="small muted">${label}</span><b>${esc(value)}</b></span>${ICON.next}</button>` : '');
+  const pains = Object.entries(d.dolori || {}).filter(([, v]) => v > 0).map(([k, v]) => `${PAIN_REGIONS.find((x) => x.id === k)?.label.toLowerCase()} (${['', 'lieve', 'medio', 'forte'][v]})`);
+  const rows = [
+    row('base', 'Chi sei', [d.sesso ? (d.sesso === 'F' ? 'Donna' : 'Uomo') : '', d.eta ? `${d.eta} anni` : '', d.altezza ? `${d.altezza} cm` : '', d.peso ? `${fmt(d.peso, 1)} kg` : ''].filter(Boolean).join(' · ')),
+    row('sogni', 'Obiettivo', [GOALS.find((g) => g.id === d.obiettivo)?.label, d.pesoObiettivo ? `${d.pesoObiettivo} kg` : '', d.dataObiettivo ? `entro il ${formatDate(d.dataObiettivo)}` : ''].filter(Boolean).join(' · ')),
+    row('tempo', 'Allenamenti', (d.sessioni || []).map((x) => `${x.giorni} × ${x.minuti} min ${LUOGO_LABEL[x.luogo].toLowerCase()}`).join(' + ')),
+    row('scheda', 'In palestra fai', gymLines(d.schedaPalestra).join(', ')),
+    row('giornata', 'La tua giornata', [{ sedentario: 'lavoro da seduto', in_piedi: 'lavoro in piedi', fisico: 'lavoro fisico' }[d.lavoro], d.sonno ? `${d.sonno} ore di sonno` : ''].filter(Boolean).join(' · ')),
+    row('dieta', 'A tavola', d.dieta ? DIET_LABEL[d.dieta] : ''),
+    row('dolori', 'Salute', [...pains, ...(d.condizioni || []).map((c) => CONDITIONS.find((x) => x.id === c)?.label)].filter(Boolean).join(', ')),
+  ].filter(Boolean);
+  return `<section class="card">${rows.join('') || '<p class="muted">Non sono riuscito a ricavare molto: nessun problema, te lo chiedo io.</p>'}</section>`;
+}
+const flowHelpers = {
+  esc, seg, chips, num, opts, multi, slotEditor, slotError, recap,
+  gymPicker: (d) => `<div class="search">${ICON.search}<input type="text" id="gym-q" placeholder="Cerca esercizio o macchinario" autocomplete="off"></div><div id="gym-picker">${gymPickerHTML(d.schedaPalestra || '')}</div>`,
+};
+
+function startFlow(edit, fromStep = null) {
+  const old = state.profile || {};
+  if (!draft || !draft._story) draft = { ...BOZZA_VUOTA(), ...JSON.parse(JSON.stringify(old)) };
+  draft.sessioni = draft.sessioni?.length ? draft.sessioni : (old.giorni ? [{ giorni: old.giorni, minuti: old.minuti, luogo: (old.attrezzi || []).includes('palestra') ? 'palestra' : 'casa' }] : BOZZA_VUOTA().sessioni);
+  draft.attrezzi = (draft.attrezzi || []).filter((a) => a !== 'palestra');
+  if (draft.zone?.length) draft._zoneScelte = true;
+  flowEdit = edit;
+  const steps = passiPer(draft);
+  flowIdx = fromStep ? Math.max(0, steps.findIndex((s) => s.id === fromStep)) : 0;
+}
+
+function viewFlow() {
+  const steps = passiPer(draft);
+  flowIdx = Math.min(flowIdx, steps.length - 1);
+  const s = steps[flowIdx];
+  const txt = (v) => (typeof v === 'function' ? v(draft) : v);
+  const inSez = steps.filter((x) => x.sez === s.sez);
+  const pos = inSez.indexOf(s);
+  return `
+  <div class="flow-top ${R(0)}">
+    <button class="icon-btn" data-action="flow-back" aria-label="Indietro">${ICON.prev}</button>
+    <div class="flow-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${steps.length}" aria-valuenow="${flowIdx + 1}">
+      ${SEZIONI.map((_, i) => `<i class="${i < s.sez ? 'done' : i === s.sez ? 'cur' : ''}" style="${i === s.sez ? `--p:${(pos + 1) / inSez.length}` : ''}"></i>`).join('')}
+    </div>
+    ${flowEdit ? '<button class="link small" data-action="flow-save">Salva ed esci</button>' : `<span class="small muted flow-count">${flowIdx + 1}/${steps.length}</span>`}
+  </div>
+  <form id="wizard" class="flow" onsubmit="return false" data-step="${s.id}">
+    <p class="kicker ${R(1)}">${SEZIONI[s.sez]}</p>
+    ${coach(esc(txt(s.coach)), R(1))}
+    <div class="${R(2)}"><h1>${esc(txt(s.titolo))}</h1>${s.sotto ? `<p class="muted flow-sub">${esc(s.sotto)}</p>` : ''}</div>
+    <div class="flow-body stack ${R(3)}">${s.render(draft, flowHelpers)}</div>
+    <p class="error" id="wiz-error" hidden></p>
+    <div class="wizard-actions"><button type="button" class="btn primary" data-action="flow-next">${flowIdx === steps.length - 1 ? (flowEdit ? 'Aggiorna il mio piano' : 'Prepara il mio piano') : 'Avanti'}</button></div>
+  </form>`;
+}
+
+function bindFlowInputs() {
+  const form = document.getElementById('wizard');
+  form.addEventListener('input', (e) => {
+    const el = e.target;
+    if (el.id === 'gym-q') { document.getElementById('gym-picker').innerHTML = gymPickerHTML(draft.schedaPalestra || '', el.value); return; }
+    if (!el.name) return;
+    if (el.name.startsWith('slotmin_')) {
+      const i = Number(el.name.slice(8));
+      draft.sessioni[i].minuti = Number(el.value);
+      const lab = document.getElementById(`slotmin-${i}`); if (lab) lab.textContent = `${el.value} min`;
+      updateWeekTotal();
+      return;
+    }
+    if (el.name.startsWith('mis_')) {
+      draft.misure = draft.misure || {};
+      const k = el.name.slice(4);
+      if (el.value === '') delete draft.misure[k]; else draft.misure[k] = Number(el.value);
+      return;
+    }
+    draft[el.name] = el.type === 'number' ? (el.value === '' ? '' : Number(el.value)) : el.value;
+  });
+  form.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); flowNext(); } });
+}
+function updateWeekTotal() {
+  const el = document.getElementById('week-total');
+  if (el) el.textContent = weekTotalText(draft);
+}
+
+function flowGo(i) {
+  flowIdx = i;
+  transition(() => { route(); window.scrollTo(0, 0); });
+}
+function flowNext() {
+  const steps = passiPer(draft);
+  const s = steps[flowIdx];
+  const err = s.errore(draft, flowHelpers);
+  const box = document.getElementById('wiz-error');
+  if (err) { if (box) { box.textContent = err; box.hidden = false; } haptic([10, 30, 10]); return; }
+  // le risposte possono aggiungere o togliere domande: riallinea la posizione sul passo attuale
+  const after = passiPer(draft);
+  const i = after.findIndex((x) => x.id === s.id);
+  if (i >= after.length - 1) finishFlow(); else flowGo(i + 1);
+}
+
+function finishFlow() {
+  const p = { ...draft };
+  const wasEdit = flowEdit && !!state.profile;
+  ['_edit', '_story', '_skip', '_zoneScelte', 'assumed'].forEach((k) => delete p[k]);
+  p.sessioni = (p.sessioni || []).filter((x) => x.giorni > 0);
+  const tot = slotTot(p);
+  p.giorni = Math.min(7, tot.g);
+  p.minuti = Math.round(tot.m / Math.max(1, tot.g));
+  p.attrezzi = [...new Set([...(p.attrezzi || []).filter((a) => a !== 'palestra'), ...(p.sessioni.some((x) => x.luogo === 'palestra') ? ['palestra'] : [])])];
+  if (p.sogni?.length) p.obiettivo = goalFromSogni(p.sogni).obiettivo || p.obiettivo;
+  p.obiettivo = p.obiettivo || 'salute';
+  p.dieta = p.dieta || 'onnivora';
+  p.alimentazione = p.alimentazione || (p.dolci === 'ogni' || p.bibite === 'ogni' ? 'disordinata' : p.dolci === 'mai' && p.bibite === 'mai' ? 'curata' : 'media');
+  p.pesoObiettivo = p.pesoObiettivo === '' ? null : p.pesoObiettivo;
+  p.dataObiettivo = p.dataObiettivo || null;
+  const old = state.profile;
+  const goalChanged = !old || old.obiettivo !== p.obiettivo || old.pesoObiettivo !== p.pesoObiettivo || old.peso !== p.peso;
+  state.profile = p;
+  if (!wasEdit || goalChanged) { state.planStart = state.planStart && wasEdit && !goalChanged ? state.planStart : today(); state.calorieAdjust = 0; }
+  // la pesata di oggi si registra alla creazione del profilo o quando il peso viene cambiato
+  if (!wasEdit || old.peso !== p.peso) {
+    state.weights = state.weights.filter((w) => w.date !== today());
+    state.weights.push({ date: today(), kg: p.peso });
+  }
+  save();
+  draft = null; storyResult = null;
+  justFinished = true;
+  location.hash = '#/perche';
+  setTimeout(() => burst(innerWidth / 2, innerHeight * 0.3), 350);
 }
 
 // ==================================================================
-// Relazione iniziale (testo libero)
+// Relazione a parole proprie (alternativa alle domande)
 // ==================================================================
 
 const STORY_KEY = 'ritmo.story';
@@ -195,35 +396,30 @@ function viewStory() {
   const hasKey = !!aiKey();
   const canDictate = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
   return `
-  <div class="wizard-top ${R(0)}">
-    <button class="icon-btn" onclick="history.back()" aria-label="Indietro">${ICON.prev}</button>
-    <div class="grow"></div><span class="chip cyan"><i></i>Relazione iniziale</span>
-  </div>
+  ${subHdr('Raccontami di te', state.profile ? '#/profilo' : '#/benvenuto')}
   <section class="stack-lg">
-    <div class="${R(1)}"><h1>Raccontami di te</h1>
-      <p class="muted" style="margin-top:8px">Scrivi come parleresti a un personal trainer. Le domande qui sotto sono una traccia: si accendono quando le hai coperte.</p></div>
+    ${coach('Scrivi come parleresti a un personal trainer. Leggo quello che mi racconti e ti faccio solo le domande che mancano.', R(1))}
     <div class="qchips ${R(2)}" id="qchips">${qchips(cov)}</div>
     <div class="story-box ${R(3)}">
       <textarea id="story" placeholder="Es. Ho 34 anni, mi alleno 2 volte a settimana in palestra per un’ora, vorrei aggiungere 20 minuti a casa 3-4 giorni a settimana. Lavoro seduto al pc…">${esc(text)}</textarea>
       <div class="row between story-tools">
-        ${canDictate ? `<button type="button" class="btn ghost small" data-action="story-mic">🎙️ Detta</button>` : '<span class="small muted">Puoi usare la dettatura della tastiera 🎙️</span>'}
-        <span class="mono small muted" id="story-count">${wordCount(text)} parole</span>
+        ${canDictate ? '<button type="button" class="btn soft small" data-action="story-mic">🎙️ Detta</button>' : '<span class="small muted">Puoi usare la dettatura della tastiera</span>'}
+        <span class="small muted" id="story-count">${wordCount(text)} parole</span>
       </div>
     </div>
-    <button class="link small ${R(4)}" data-action="story-example">Vedi un esempio di relazione</button>
-    <div class="card ${R(5)}">
-      <div class="row between"><b>Analisi avanzata con Claude</b>${hasKey ? '<span class="chip volt"><i></i>Attiva</span>' : '<span class="chip">Facoltativa</span>'}</div>
+    <button class="link small ${R(4)}" data-action="story-example">Vedi un esempio</button>
+    <details class="card fold ${R(5)}">
+      <summary><b>Analisi avanzata con Claude</b><span class="chip ${hasKey ? 'ok' : ''}">${hasKey ? 'Attiva' : 'Facoltativa'}</span></summary>
       ${hasKey ? `<label class="row small" style="margin-top:10px"><input type="checkbox" id="use-ai" checked> Usa Claude per capire meglio il testo</label>
-        <p class="small muted" style="margin-top:6px">Il testo viene inviato ad Anthropic con la tua chiave. Senza connessione si usa l’analisi integrata.</p>`
-        : `<p class="small muted" style="margin-top:6px">L’analisi integrata funziona offline e riconosce le frasi più comuni. Con una tua chiave API di Anthropic Claude capisce qualsiasi modo di scrivere. La chiave resta solo su questo telefono.</p>
-        <div class="row" style="margin-top:10px"><input type="password" id="ai-key" placeholder="sk-ant-…" autocomplete="off"><button type="button" class="btn ghost small" data-action="ai-save">Salva</button></div>`}
-    </div>
-    <div class="wizard-actions"><button class="btn primary" data-action="story-analyze">Analizza la mia relazione</button></div>
+        <p class="small muted" style="margin-top:6px">Il testo viene inviato ad Anthropic con la tua chiave. Senza connessione uso l’analisi integrata.</p>`
+        : `<p class="small muted" style="margin-top:8px">L’analisi integrata funziona offline e riconosce le frasi più comuni. Con una tua chiave API di Anthropic, Claude capisce qualsiasi modo di scrivere. La chiave resta solo su questo telefono.</p>
+        <div class="row" style="margin-top:10px"><input type="password" id="ai-key" placeholder="sk-ant-…" autocomplete="off"><button type="button" class="btn soft small" data-action="ai-save">Salva</button></div>`}
+    </details>
+    <div class="wizard-actions"><button class="btn primary" data-action="story-analyze">Continua</button></div>
   </section>`;
 }
 const wordCount = (t) => (t.trim() ? t.trim().split(/\s+/).length : 0);
 const qchips = (cov) => cov.map((q) => `<span class="qchip ${q.ok ? 'ok' : ''}"><i>${q.ok ? '✓' : '○'}</i><span><b>${q.label}${q.optional ? ' <em class="small muted">facoltativa</em>' : ''}</b><small>${q.hint}</small></span></span>`).join('');
-
 let storyTimer = null;
 function updateStoryCoverage() {
   const el = document.getElementById('story');
@@ -264,317 +460,55 @@ async function analyzeStory(btn) {
     btn.disabled = true; btn.textContent = 'Claude sta leggendo…';
     try { result = mergeAI(result, await analyzeWithClaude(text, aiKey())); }
     catch (e) { toast(`Analisi avanzata non riuscita: uso quella integrata (${e?.status === 401 ? 'chiave non valida' : 'errore di rete'})`); }
-    btn.disabled = false; btn.textContent = 'Analizza la mia relazione';
+    btn.disabled = false; btn.textContent = 'Continua';
   }
   storyResult = result;
-  draftFromStory(result, text);
-  location.hash = '#/capito';
-}
-
-const DEFAULTS = { fumo: 'no', alcol: 'occasionale', stress: 'medio', sonno: 7, alimentazione: 'media', esperienza: 'principiante', lavoro: 'sedentario', passi: '5000-7500', dieta: 'onnivora' };
-function draftFromStory(r, text) {
+  // la relazione precompila le risposte: il percorso riparte dalla prima domanda senza risposta
   const old = state.profile || {};
-  const base = { nome: '', condizioni: [], attrezzi: [], misure: {}, dolori: {}, note: '', traguardo: '', pesoObiettivo: '', dataObiettivo: '' };
-  draft = { ...base, ...old, ...r.profile, relazione: text };
-  draft.assumed = [];
-  for (const [k, v] of Object.entries(DEFAULTS)) if (r.profile[k] === undefined && old[k] === undefined) { draft[k] = v; draft.assumed.push(k); }
-  draft.sessioni = r.sessioni?.length ? r.sessioni.map((x) => ({ giorni: x.giorni, minuti: x.minuti, luogo: x.luogo })) : (old.sessioni || [{ giorni: 3, minuti: 30, luogo: 'casa' }]);
-  draft.misure = { ...(old.misure || {}), ...(r.profile.misure || {}) };
-  draft._edit = !!state.profile;
-  wizardStep = STEPS.length - 1;
-}
-function reviewError() {
-  const d = draft;
-  if (!d.sesso) return 'Indica il sesso.';
-  if (!(d.eta >= 14 && d.eta <= 100)) return 'Inserisci la tua età.';
-  if (!(d.altezza >= 120 && d.altezza <= 230)) return 'Inserisci la tua altezza in cm.';
-  if (!(d.peso >= 30 && d.peso <= 300)) return 'Inserisci il tuo peso in kg.';
-  if (!d.obiettivo) return 'Scegli il tuo obiettivo principale.';
-  return slotError(d);
-}
-
-function viewReview() {
-  const d = draft;
-  const r = storyResult || { found: {}, evidence: {} };
-  const ok = (k) => (r.found[k] ? '<span class="found">✓ dal testo</span>' : '<span class="missing">da completare</span>');
-  const as = (k) => (d.assumed?.includes(k) ? '<span class="assumed">ipotesi</span>' : '<span class="found">✓</span>');
-  const pains = Object.entries(d.dolori || {}).filter(([, v]) => v > 0);
-  return `
-  <div class="wizard-top ${R(0)}">
-    <button class="icon-btn" onclick="location.hash='#/racconto'" aria-label="Indietro">${ICON.prev}</button>
-    <div class="grow"></div><span class="chip volt"><i></i>${r.ai ? 'Analizzato con Claude' : 'Analisi integrata'}</span>
-  </div>
-  <form id="wizard" class="stack-lg" onsubmit="return false">
-    <div class="${R(1)}"><h1>Ecco cosa ho capito</h1><p class="muted" style="margin-top:8px">Controlla, completa quello che manca e genera il piano.</p></div>
-    ${r.sintesi ? `<div class="card glow ${R(2)}"><p>${esc(r.sintesi)}</p>${r.noteCoach?.length ? `<ul class="coach-notes">${r.noteCoach.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}</div>` : ''}
-
-    <section class="card ${R(2)}"><div class="row between"><h3>Chi sei</h3></div>
-      <div class="field" style="margin-top:12px"><span>Sesso ${ok('sesso')}</span>${seg('sesso', [['F', 'Donna'], ['M', 'Uomo']], d.sesso)}</div>
-      <div class="grid-3" style="margin-top:12px">
-        ${num('eta', `Età`, d.eta, 'min="14" max="100"')}${num('altezza', 'Altezza cm', d.altezza, 'min="120" max="230"')}${num('peso', 'Peso kg', d.peso, 'min="30" max="300" step="0.1"')}
-      </div>
-    </section>
-
-    <section class="card ${R(3)}"><div class="row between"><h3>Obiettivo</h3>${ok('obiettivo')}</div>
-      <div class="seg" data-name="obiettivo" style="margin-top:12px">${GOALS.map((g) => `<button type="button" data-value="${g.id}" class="${d.obiettivo === g.id ? 'on' : ''}">${g.icon} ${g.label}</button>`).join('')}</div>
-      <div class="grid-2" style="margin-top:12px">${num('pesoObiettivo', 'Peso obiettivo', d.pesoObiettivo, 'step="0.5" placeholder="kg"')}
-        <label class="field"><span>Entro</span><input type="date" name="dataObiettivo" value="${esc(d.dataObiettivo || '')}"></label></div>
-    </section>
-
-    <section class="card ${R(4)}"><div class="row between"><h3>La tua settimana</h3>${ok('sessioni')}</div>
-      <div style="margin-top:12px">${slotEditor(d)}</div>
-      <div class="field" style="margin-top:12px"><span>Attrezzi a casa</span>${chips('attrezzi', EQUIPMENT.filter((e) => e.id !== 'palestra'), d.attrezzi)}</div>
-    </section>
-
-    ${d.sessioni?.some((x) => x.luogo === 'palestra') ? `<section class="card ${R(5)}"><div class="row between"><h3>I tuoi esercizi in palestra</h3>${d.schedaPalestra?.trim() ? (r.found.scheda ? '<span class="found">✓ dal testo</span>' : '<span class="found">✓</span>') : '<span class="assumed">facoltativo</span>'}</div>
-      <p class="small muted" style="margin-top:6px">Scrivi cosa fai di solito, uno per riga: dopo ti dico cosa tenere, cambiare o aggiungere.</p>
-      <textarea name="schedaPalestra" style="margin-top:10px" placeholder="${esc(GYM_PLACEHOLDER)}">${esc(d.schedaPalestra || '')}</textarea>
-    </section>` : ''}
-
-    <section class="card ${R(5)}"><div class="row between"><h3>Alimentazione</h3>${ok('dieta')}</div>
-      <div style="margin-top:12px">${seg('dieta', DIETS.map((x) => [x.id, x.label]), d.dieta)}</div>
-    </section>
-
-    <section class="card ${R(6)}"><div class="row between"><h3>Salute</h3>${ok('salute')}</div>
-      <p class="small muted" style="margin-top:8px">${pains.length ? 'Dolori riconosciuti: ' + pains.map(([k, v]) => `${PAIN_REGIONS.find((x) => x.id === k)?.label.toLowerCase()} (${['', 'lieve', 'medio', 'forte'][v]})`).join(', ') : 'Nessun dolore indicato.'}${d.condizioni?.length ? ' · Condizioni: ' + d.condizioni.map((c) => CONDITIONS.find((x) => x.id === c)?.label).filter(Boolean).join(', ') : ''}</p>
-      <div class="pain-list" style="margin-top:10px">${PAIN_REGIONS.map((x) => `<div class="pain-row"><span>${x.label}</span>${seg('dol_' + x.id, PAIN_LEVELS, d.dolori?.[x.id] ?? 0)}</div>`).join('')}</div>
-      <div class="field" style="margin-top:12px"><span>Condizioni</span>${chips('condizioni', CONDITIONS, d.condizioni)}</div>
-    </section>
-
-    <section class="card ${R(7)}"><h3>Giornata e abitudini</h3>
-      <div class="field" style="margin-top:12px"><span>Lavoro ${as('lavoro')}</span>${seg('lavoro', [['sedentario', 'Seduto'], ['in_piedi', 'In piedi'], ['fisico', 'Fisico']], d.lavoro)}</div>
-      <div class="field" style="margin-top:12px"><span>Passi al giorno ${as('passi')}</span>${seg('passi', [['<3000', '< 3k'], ['3000-5000', '3–5k'], ['5000-7500', '5–7,5k'], ['7500-10000', '7,5–10k'], ['>10000', '> 10k']], d.passi)}</div>
-      <div class="field" style="margin-top:12px"><span>Ore di sonno ${as('sonno')}</span>${seg('sonno', [[5, '≤ 5'], [6, '6'], [7, '7'], [8, '8'], [9, '9+']], d.sonno)}</div>
-      <div class="field" style="margin-top:12px"><span>Esperienza ${as('esperienza')}</span>${seg('esperienza', [['principiante', 'Principiante'], ['intermedio', 'Intermedio'], ['avanzato', 'Avanzato']], d.esperienza)}</div>
-      <div class="grid-2" style="margin-top:12px">
-        <div class="field"><span>Fumo ${as('fumo')}</span>${seg('fumo', [['no', 'No'], ['si', 'Sì']], d.fumo)}</div>
-        <div class="field"><span>Stress ${as('stress')}</span>${seg('stress', [['basso', 'Basso'], ['medio', 'Medio'], ['alto', 'Alto']], d.stress)}</div>
-      </div>
-    </section>
-    <p class="error" id="wiz-error" hidden></p>
-    <div class="wizard-actions"><button type="button" class="btn primary" data-action="story-generate">Genera il mio piano</button></div>
-    <button type="button" class="link small" data-action="story-edit-all" style="display:block;margin:0 auto">Rivedi tutto passo per passo</button>
-  </form>`;
-}
-
-// ==================================================================
-// Wizard
-// ==================================================================
-
-const seg = (name, opts, val) => `<div class="seg" data-name="${name}">${opts.map(([v, l]) => `<button type="button" data-value="${v}" class="${String(val) === String(v) ? 'on' : ''}">${l}</button>`).join('')}</div>`;
-const chips = (name, opts, vals = []) => `<div class="chips" data-multi="${name}">${opts.map((o) => `<button type="button" data-value="${o.id}" class="${vals.includes(o.id) ? 'on' : ''}">${esc(o.label)}</button>`).join('')}</div>`;
-const num = (name, label, val, attrs = '') => `<label class="field"><span>${label}</span><input type="number" inputmode="decimal" name="${name}" value="${val ?? ''}" ${attrs}></label>`;
-
-const STEPS = [
-  {
-    title: 'Il tuo corpo', sub: 'Servono per calcolare metabolismo e fabbisogno.',
-    render: (d) => `
-      <label class="field"><span>Come ti chiami?</span><input type="text" name="nome" value="${esc(d.nome)}" autocomplete="given-name" placeholder="Nome"></label>
-      <div class="field"><span>Sesso biologico</span>${seg('sesso', [['F', 'Donna'], ['M', 'Uomo']], d.sesso)}</div>
-      <div class="grid-3">
-        ${num('eta', 'Età', d.eta, 'min="14" max="100"')}
-        ${num('altezza', 'Altezza cm', d.altezza, 'min="120" max="230"')}
-        ${num('peso', 'Peso kg', d.peso, 'min="30" max="300" step="0.1"')}
-      </div>`,
-    validate: (d) => {
-      if (!d.sesso) return 'Seleziona il sesso.';
-      if (!(d.eta >= 14 && d.eta <= 100)) return 'Inserisci un’età tra 14 e 100 anni.';
-      if (!(d.altezza >= 120 && d.altezza <= 230)) return 'Inserisci un’altezza tra 120 e 230 cm.';
-      if (!(d.peso >= 30 && d.peso <= 300)) return 'Inserisci un peso tra 30 e 300 kg.';
-      return null;
-    },
-  },
-  {
-    title: 'Le tue misure', sub: 'Con un metro da sarta. Servono per stimare massa grassa e massa magra e per misurare i progressi meglio della bilancia. Puoi lasciarle vuote e farle dopo.',
-    render: (d) => MEASURES.filter((m) => !m.sex || m.sex === d.sesso).map((m) => `<label class="field"><span>${m.label} (${m.unit})${m.optional ? ' · facoltativa' : ''}</span><input type="number" inputmode="decimal" name="mis_${m.id}" value="${esc(d.misure?.[m.id] ?? '')}"><small>${m.how}</small></label>`).join(''),
-    validate: (d) => {
-      for (const m of MEASURES) {
-        const v = d.misure?.[m.id];
-        if (v !== undefined && v !== '' && !(v >= m.min && v <= m.max)) return `${m.label}: il valore non sembra corretto (${m.min}–${m.max} ${m.unit}).`;
-      }
-      if (d.misure?.vita && d.misure?.collo && d.misure.vita <= d.misure.collo) return 'La vita deve essere più grande del collo: ricontrolla le misure.';
-      return null;
-    },
-  },
-  {
-    title: 'La tua salute', sub: 'Seleziona tutto ciò che ti riguarda. Se non hai nulla, vai avanti.',
-    render: (d) => `
-      ${chips('condizioni', CONDITIONS, d.condizioni)}
-      <label class="field"><span>Farmaci, infortuni o altro (facoltativo)</span><textarea name="note" placeholder="Es. operato al menisco destro nel 2022">${esc(d.note)}</textarea><small>Resta sul tuo telefono. Parlane anche con il medico.</small></label>`,
-    validate: () => null,
-  },
-  {
-    title: 'Dolori e fastidi', sub: 'Dove senti dolore oggi, anche fuori dall’allenamento? Il piano esclude o rende più facili gli esercizi che caricano quella zona.',
-    render: (d) => `<div class="pain-list">${PAIN_REGIONS.map((r) => `<div class="pain-row"><span>${r.label}</span>${seg('dol_' + r.id, PAIN_LEVELS, d.dolori?.[r.id] ?? 0)}</div>`).join('')}</div>
-      <p class="small muted">Lieve: fastidio che non limita. Medio: limita alcuni movimenti. Forte: limita la vita quotidiana.</p>`,
-    validate: () => null,
-  },
-  {
-    title: 'Le tue abitudini', sub: 'Come vivi oggi, senza giudizi.',
-    render: (d) => `
-      <div class="field"><span>Il tuo lavoro</span>${seg('lavoro', [['sedentario', 'Seduto'], ['in_piedi', 'In piedi'], ['fisico', 'Fisico']], d.lavoro)}</div>
-      <div class="field"><span>Passi al giorno</span>${seg('passi', [['<3000', '< 3k'], ['3000-5000', '3–5k'], ['5000-7500', '5–7,5k'], ['7500-10000', '7,5–10k'], ['>10000', '> 10k']], d.passi)}</div>
-      <div class="field"><span>Ore di sonno</span>${seg('sonno', [[5, '≤ 5'], [6, '6'], [7, '7'], [8, '8'], [9, '9+']], d.sonno)}</div>
-      <div class="field"><span>Esperienza di allenamento</span>${seg('esperienza', [['principiante', 'Principiante'], ['intermedio', 'Intermedio'], ['avanzato', 'Avanzato']], d.esperienza)}<small>Principiante: mai allenato o fermo da più di 6 mesi.</small></div>
-      <div class="field"><span>Alimentazione</span>${seg('alimentazione', [['disordinata', 'Disordinata'], ['media', 'Nella media'], ['curata', 'Curata']], d.alimentazione)}</div>
-      <div class="grid-2">
-        <div class="field"><span>Fumi?</span>${seg('fumo', [['no', 'No'], ['si', 'Sì']], d.fumo)}</div>
-        <div class="field"><span>Alcol</span>${seg('alcol', [['mai', 'Mai'], ['occasionale', 'A volte'], ['spesso', 'Spesso']], d.alcol)}</div>
-      </div>
-      <div class="field"><span>Stress</span>${seg('stress', [['basso', 'Basso'], ['medio', 'Medio'], ['alto', 'Alto']], d.stress)}</div>
-      <div class="field"><span>Tipo di alimentazione</span>${seg('dieta', DIETS.map((x) => [x.id, x.label]), d.dieta || 'onnivora')}</div>`,
-    validate: (d) => {
-      for (const [k, l] of [['lavoro', 'il lavoro'], ['passi', 'i passi'], ['sonno', 'le ore di sonno'], ['esperienza', 'l’esperienza'], ['alimentazione', 'l’alimentazione'], ['fumo', 'il fumo'], ['alcol', 'l’alcol'], ['stress', 'lo stress']]) if (d[k] === undefined || d[k] === '') return `Indica ${l}.`;
-      return null;
-    },
-  },
-  {
-    title: 'Il tuo obiettivo', sub: 'Scegli quello principale: il piano ruoterà attorno a questo.',
-    render: (d) => `
-      <div class="goal-grid" data-name="obiettivo">${GOALS.map((g) => `<button type="button" data-value="${g.id}" class="${d.obiettivo === g.id ? 'on' : ''}"><span class="gi">${g.icon}</span><b>${g.label}</b><small>${g.desc}</small></button>`).join('')}</div>
-      <div class="grid-2">
-        ${num('pesoObiettivo', 'Peso obiettivo kg', d.pesoObiettivo, 'min="35" max="250" step="0.5" placeholder="facoltativo"')}
-        <label class="field"><span>Entro quando?</span><input type="date" name="dataObiettivo" value="${esc(d.dataObiettivo)}" min="${toISO(addDays(new Date(), 14))}"></label>
-      </div>
-      <label class="field"><span>Un traguardo concreto (facoltativo)</span><input type="text" name="traguardo" value="${esc(d.traguardo)}" placeholder="Es. correre 10 km, fare 10 trazioni"></label>`,
-    validate: (d) => (!d.obiettivo ? 'Scegli un obiettivo.' : d.pesoObiettivo && !(d.pesoObiettivo >= 35 && d.pesoObiettivo <= 250) ? 'Il peso obiettivo non sembra corretto.' : null),
-  },
-  {
-    title: 'Il tuo tempo', sub: 'Meglio poco ma costante: scegli un impegno che riesci davvero a mantenere.',
-    render: (d) => `
-      <p class="small muted">Puoi combinare sessioni diverse: per esempio 2 da un’ora in palestra e 4 da 20 minuti a casa.</p>
-      ${slotEditor(d)}
-      <div class="field"><span>Attrezzi che hai a casa</span>${chips('attrezzi', EQUIPMENT.filter((e) => e.id !== 'palestra'), d.attrezzi)}<small>Il corpo libero è sempre incluso. In palestra trovi già tutto.</small></div>`,
-    validate: (d) => slotError(d),
-  },
-];
-
-function minutesHint(m) {
-  if (m <= 15) return 'Allenamenti brevi a circuito: pochi minuti, ma intensi e regolari.';
-  if (m <= 30) return 'Ottimo compromesso: abbastanza per risultati concreti.';
-  if (m <= 60) return 'Sessioni complete: riscaldamento, lavoro e defaticamento.';
-  return 'Tanto tempo: più volume. Ricordati di recuperare.';
-}
-const slotTot = (d) => (d.sessioni || []).reduce((a, x) => ({ g: a.g + (x.giorni || 0), m: a.m + (x.giorni || 0) * x.minuti }), { g: 0, m: 0 });
-const weekTotalText = (d) => { const t = slotTot(d); return `Totale: ${t.g} allenamenti e ${t.m} minuti a settimana${t.m < 150 ? ' · le camminate completeranno il resto' : ''}.`; };
-const slotError = (d) => { const t = slotTot(d); return !t.g ? 'Indica almeno una sessione a settimana.' : t.g > 7 ? `In totale hai ${t.g} giorni: al massimo 7 a settimana.` : null; };
-const LUOGHI = [['palestra', 'Palestra'], ['casa', 'Casa'], ['aperto', 'All’aperto']];
-function slotEditor(d) {
-  const S = d.sessioni || [];
-  return `<div class="slots">${S.map((x, i) => `
-    <div class="slot card flat">
-      <div class="row between"><span class="kicker">Sessione ${S.length > 1 ? i + 1 : ''}</span>${S.length > 1 ? `<button type="button" class="link small" data-action="slot-del" data-i="${i}">Rimuovi</button>` : ''}</div>
-      <div class="seg" data-slot="${i}" data-field="luogo">${LUOGHI.map(([v, l]) => `<button type="button" data-value="${v}" class="${x.luogo === v ? 'on' : ''}">${l}</button>`).join('')}</div>
-      <p class="small muted" style="margin-top:12px">Giorni a settimana</p>
-      <div class="seg seg-days" data-slot="${i}" data-field="giorni">${[1, 2, 3, 4, 5, 6, 7].map((v) => `<button type="button" data-value="${v}" class="${x.giorni === v ? 'on' : ''}">${v}</button>`).join('')}</div>
-      <div class="row between" style="margin-top:12px"><span class="small muted">Durata di ogni sessione</span><b class="mono" id="slotmin-${i}">${x.minuti} min</b></div>
-      <input type="range" min="10" max="120" step="5" name="slotmin_${i}" value="${x.minuti}" aria-label="Durata">
-    </div>`).join('')}</div>
-    ${S.length < 3 ? '<button type="button" class="btn ghost wide" data-action="slot-add">+ Aggiungi un altro tipo di sessione</button>' : ''}
-    <p class="small muted" id="week-total">${weekTotalText(d)}</p>`;
-}
-
-function viewWizard() {
-  const step = STEPS[wizardStep];
-  return `
-  <div class="wizard-top ${R(0)}">
-    <button class="icon-btn" data-action="wiz-back" aria-label="Indietro">${ICON.prev}</button>
-    <div class="steps">${STEPS.map((_, i) => `<i class="${i < wizardStep ? 'on' : i === wizardStep ? 'cur' : ''}"></i>`).join('')}</div>
-    <span class="mono small muted">${String(wizardStep + 1).padStart(2, '0')}/${String(STEPS.length).padStart(2, '0')}</span>
-  </div>
-  <form id="wizard" class="stack-lg" onsubmit="return false">
-    <div class="${R(1)}"><p class="kicker">Passo ${wizardStep + 1}</p><h1 style="margin-top:6px">${step.title}</h1><p class="muted" style="margin-top:8px">${step.sub}</p></div>
-    <div class="stack-lg ${R(2)}">${step.render(draft)}</div>
-    <p class="error" id="wiz-error" hidden></p>
-    <div class="wizard-actions">
-      <button type="button" class="btn primary" data-action="wiz-next">${wizardStep === STEPS.length - 1 ? 'Genera il mio piano' : 'Avanti'}</button>
-    </div>
-  </form>`;
-}
-
-function bindWizardInputs() {
-  document.getElementById('wizard').addEventListener('input', (e) => {
-    const el = e.target;
-    if (!el.name) return;
-    if (el.name.startsWith('slotmin_')) {
-      const i = Number(el.name.slice(8));
-      draft.sessioni[i].minuti = Number(el.value);
-      const lab = document.getElementById(`slotmin-${i}`); if (lab) lab.textContent = `${el.value} min`;
-      updateWeekTotal();
-      return;
-    }
-    if (el.name.startsWith('mis_')) {
-      draft.misure = draft.misure || {};
-      const k = el.name.slice(4);
-      if (el.value === '') delete draft.misure[k]; else draft.misure[k] = Number(el.value);
-      return;
-    }
-    draft[el.name] = el.type === 'number' || el.type === 'range' ? (el.value === '' ? '' : Number(el.value)) : el.value;
-    if (el.name === 'minuti') {
-      document.getElementById('min-out').textContent = el.value;
-      document.getElementById('min-hint').textContent = minutesHint(Number(el.value));
-      updateWeekTotal();
-    }
-  });
-}
-function updateWeekTotal() {
-  const el = document.getElementById('week-total');
-  if (el) el.textContent = weekTotalText(draft);
-}
-
-function initDraft(edit) {
-  draft = edit && state.profile ? structuredClone(state.profile) : {
-    nome: '', condizioni: [], attrezzi: [], misure: {}, dolori: {}, minuti: 30, giorni: 3, sonno: '', note: '', traguardo: '', pesoObiettivo: '', dataObiettivo: '',
-  };
-  if (!draft.sessioni?.length) draft.sessioni = [{ giorni: draft.giorni || 3, minuti: draft.minuti || 30, luogo: (draft.attrezzi || []).includes('palestra') ? 'palestra' : 'casa' }];
-  draft._edit = edit;
-  wizardStep = 0;
-}
-function startWizard(edit = false) {
-  initDraft(edit);
-  if (location.hash === '#/setup') route();
-  else location.hash = '#/setup';
-}
-
-function finishWizard() {
-  const p = { ...draft };
-  const wasEdit = p._edit;
-  delete p._edit;
-  p.sessioni = (p.sessioni || []).filter((x) => x.giorni > 0);
-  const tot = slotTot(p);
-  p.giorni = Math.min(7, tot.g);
-  p.minuti = Math.round(tot.m / Math.max(1, tot.g));
-  p.attrezzi = [...new Set([...(p.attrezzi || []).filter((a) => a !== 'palestra'), ...(p.sessioni.some((x) => x.luogo === 'palestra') ? ['palestra'] : [])])];
-  p.dieta = p.dieta || 'onnivora';
-  delete p.assumed;
-  storyResult = null;
-  p.pesoObiettivo = p.pesoObiettivo === '' ? null : p.pesoObiettivo;
-  p.dataObiettivo = p.dataObiettivo || null;
-  const old = state.profile;
-  const goalChanged = !old || old.obiettivo !== p.obiettivo || old.pesoObiettivo !== p.pesoObiettivo || old.peso !== p.peso;
-  state.profile = p;
-  if (!wasEdit || goalChanged) { state.planStart = today(); state.calorieAdjust = 0; }
-  if (!state.weights.some((w) => w.date === today())) state.weights.push({ date: today(), kg: p.peso });
-  else state.weights = state.weights.map((w) => (w.date === today() ? { ...w, kg: p.peso } : w));
-  save();
-  draft = null;
-  if (!wasEdit && !state.assess.length) { location.hash = '#/valutazione'; toast('Profilo creato: ora misuriamo il tuo punto di partenza'); return; }
-  location.hash = '#/piano';
-  setTimeout(() => burst(innerWidth / 2, innerHeight * 0.3), 350);
-  toast(wasEdit ? 'Piano aggiornato' : 'Il tuo piano è pronto');
+  draft = { ...BOZZA_VUOTA(), ...JSON.parse(JSON.stringify(old)), ...result.profile, relazione: text, _story: true };
+  draft.sessioni = result.sessioni?.length ? result.sessioni.map((x) => ({ giorni: x.giorni, minuti: x.minuti, luogo: x.luogo })) : (old.sessioni || BOZZA_VUOTA().sessioni);
+  draft.misure = { ...(old.misure || {}), ...(result.profile.misure || {}) };
+  if (draft.obiettivo && !draft.sogni?.length) draft.sogni = SOGNI.filter((s) => s.goal === draft.obiettivo).slice(0, 1).map((s) => s.id);
+  startFlow(!!state.profile);
+  // le domande a cui il racconto ha già risposto si saltano: restano il riepilogo e quello che manca
+  draft._skip = passiCoperti(draft, result.found);
+  flowIdx = 0;
+  location.hash = '#/inizio';
 }
 
 // ==================================================================
 // Oggi
 // ==================================================================
 
-function sessionFor(plan, iso) {
-  const from = state.log[iso]?.sessionFrom;
-  const wd = from ?? weekdayIndex(fromISO(iso));
-  return { session: plan.schedule[wd].session, moved: from !== undefined && from !== null };
+const saluto = () => { const h = new Date().getHours(); return h < 5 ? 'Buonanotte' : h < 13 ? 'Buongiorno' : h < 18 ? 'Buon pomeriggio' : 'Buonasera'; };
+
+/** la frase del coach per oggi: una sola, legata a quello che sta succedendo */
+function coachToday(plan, session, lg, an) {
+  const p = state.profile;
+  const done = Object.values(state.log).filter((l) => l.done).length;
+  if (lg.done) return ['Allenamento fatto. Adesso recupera: bevi, mangia le tue proteine e dormi bene.', 'Ottimo lavoro oggi. È la costanza che cambia il corpo, e tu ci stai lavorando.'][done % 2];
+  if (!done && session) return `Oggi cominciamo. ${session.minutes} minuti, ti guido io esercizio per esercizio: tu devi solo premere “Inizia”.`;
+  if (!done) return 'Oggi è giorno di recupero. Se hai voglia di partire subito, puoi fare il primo allenamento anche adesso.';
+  if (an.streak >= 3 && session) return `${an.streak} allenamenti di fila: stai costruendo un’abitudine. Oggi tocca a ${session.title.toLowerCase()}.`;
+  if (an.missed >= 2 && session) return 'Qualche allenamento è saltato, capita. Non devi recuperare tutto: riparti da quello di oggi.';
+  if (session) {
+    const z = (plan.zones || []).map((x) => ZONE_LABEL[x].toLowerCase());
+    return `Oggi ${session.title.toLowerCase()}, ${session.minutes} minuti${z.length && session.kind === 'forza' ? `: c’è lavoro in più per ${z.join(' e ')}` : ''}.`;
+  }
+  const steps = plan.habits.find((h) => h.key === 'passi');
+  return `Oggi si recupera: i muscoli crescono a riposo. Una camminata${steps ? ` verso i tuoi ${steps.target.toLocaleString('it-IT')} passi` : ''} e sei a posto.${p.sonno < 7 ? ' E stasera prova ad andare a letto mezz’ora prima.' : ''}`;
 }
 
-const ECG = '<svg class="ecg" viewBox="0 0 520 34" preserveAspectRatio="none" aria-hidden="true"><path d="M0 20 H120 L130 20 L138 6 L148 30 L156 12 L162 20 H300 L310 20 L318 4 L328 32 L336 14 L342 20 H520"/></svg>';
+/** il prossimo passo utile, uno solo alla volta */
+function nextStepCard() {
+  const since = daysSinceAssess();
+  const miss = domandeMancanti();
+  if (miss.length) return `<a class="card step-card ${R(3)}" href="#/inizio" data-action="complete-flow"><span class="step-ico">🩺</span><div><b>Completa la tua indagine</b><p class="small muted">Mi mancano ${miss.length} risposte per rendere allenamento e menu davvero tuoi. Due minuti.</p></div>${ICON.next}</a>`;
+  if (since === null) return `<a class="card step-card ${R(3)}" href="#/valutazione"><span class="step-ico">📏</span><div><b>Misuriamo da dove parti</b><p class="small muted">10 minuti di test guidati: uso i tuoi risultati per livelli, serie e traguardi.</p></div>${ICON.next}</a>`;
+  if (hasGym() && !state.profile.schedaPalestra?.trim()) return `<a class="card step-card ${R(3)}" href="#/palestra"><span class="step-ico">🏋️</span><div><b>Cosa fai di solito in palestra?</b><p class="small muted">Tocca i tuoi esercizi: ti dico quali tenere, cambiare o aggiungere.</p></div>${ICON.next}</a>`;
+  if (since >= 28) return `<a class="card step-card ${R(3)}" href="#/valutazione"><span class="step-ico">📈</span><div><b>È ora di rimisurarci</b><p class="small muted">Sono passate ${Math.floor(since / 7)} settimane: rifai i test per vedere i progressi veri.</p></div>${ICON.next}</a>`;
+  return '';
+}
 
 function viewToday() {
   const p = state.profile;
@@ -591,6 +525,8 @@ function viewToday() {
   const stops = plan.alerts.filter((a) => a.level === 'stop');
   const lastW = [...state.weights].sort((a, b) => a.date.localeCompare(b.date)).pop();
   const needWeigh = !lastW || daysBetween(fromISO(lastW.date), now) >= 7;
+  const an = analyzeProgress(state, plan);
+  warmDemos(plan.schedule.flatMap((d) => (d.session ? sessionIds(d.session) : [])));
 
   const movedDone = new Set();
   for (let i = 0; i < 7; i++) {
@@ -604,99 +540,84 @@ function viewToday() {
     const done = state.log[di]?.done || movedDone.has(i);
     const past = d < fromISO(today()) && fromISO(di) >= fromISO(state.planStart);
     const dot = s ? (done ? 'done' : past ? 'miss' : 'train') : (done ? 'done' : '');
-    return `<button data-action="pick-day" data-day="${i}" class="${di === today() ? 'today' : ''} ${i === selectedDay ? 'sel' : ''}"><span>${l}</span><b>${d.getDate()}</b><i class="${dot}"></i></button>`;
+    return `<button data-action="pick-day" data-day="${i}" class="${di === today() ? 'today' : ''} ${i === selectedDay ? 'sel' : ''}" aria-label="${WEEKDAYS_LONG[i]}${s ? ', allenamento' : ', riposo'}${done ? ', fatto' : ''}"><span>${l}</span><b>${d.getDate()}</b><i class="${dot}">${done ? '✓' : ''}</i></button>`;
   }).join('');
 
   return `
-  <header class="hdr ${R(0)}">
-    <div>
-      <p class="kicker">${viewDate.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' })} · sett ${week} · ${plan.phase.label}</p>
-      <h1>${isToday ? `Ciao${p.nome ? ' ' + esc(p.nome) : ''}` : WEEKDAYS_LONG[selectedDay]}</h1>
-    </div>
-    <span class="chip volt live"><i></i>${isToday ? 'Live' : 'Anteprima'}</span>
-  </header>
-  <div class="${R(1)}">${ECG}</div>
-  <nav class="weekstrip ${R(2)}" aria-label="Settimana">${strip}</nav>
+  ${hdr(isToday ? `${saluto()}${p.nome ? `, ${esc(p.nome)}` : ''}` : WEEKDAYS_LONG[selectedDay], `${cap(viewDate.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' }))} · settimana ${week}`)}
+  <nav class="weekstrip ${R(1)}" aria-label="Settimana">${strip}</nav>
   <div class="stack">
-    ${stops.length ? `<a href="#/piano" class="alert stop ${R(3)}" style="text-decoration:none"><span>⚠︎</span><span><b>Prima di iniziare:</b> ${esc(stops[0].text)}${stops.length > 1 ? ` (+${stops.length - 1})` : ''}</span></a>` : ''}
-    ${isToday ? assessCard() : ''}
+    ${isToday ? coach(esc(coachToday(plan, session, lg, an)), R(2)) : ''}
+    ${stops.length ? `<a href="#/perche" class="alert stop ${R(2)}"><span>⚠️</span><span><b>Prima di iniziare:</b> ${esc(stops[0].text)}${stops.length > 1 ? ` (+${stops.length - 1})` : ''}</span></a>` : ''}
     ${session ? sessionCard(session, iso, lg, moved) : restCard(plan, iso, lg)}
+    ${isToday ? nextStepCard() : ''}
+    ${mealsCard(plan, selectedDay)}
     ${isToday ? habitsCard(plan, iso) : ''}
-    ${isToday && !state.profile.schedaPalestra?.trim() ? gymCard(R(5)) : ''}
     ${isToday && needWeigh ? `
       <div class="card ${R(6)}">
-        <div class="row between"><h3>Check-in settimanale</h3><span class="mono small muted">${lastW ? fmt(lastW.kg, 1) + ' KG' : ''}</span></div>
-        <p class="small muted" style="margin-top:4px">Pesati al mattino, a digiuno. Serve per adattare il piano.</p>
-        <form class="row" style="margin-top:12px" data-form="weight"><input type="number" name="kg" step="0.1" min="30" max="300" inputmode="decimal" placeholder="kg" required><button class="btn ghost">Salva</button></form>
+        <div class="row between"><h3>Pesata della settimana</h3>${lastW ? `<span class="small muted">l’ultima: ${fmt(lastW.kg, 1)} kg</span>` : ''}</div>
+        <p class="small muted">Al mattino, a digiuno. Mi serve per regolare il tuo piano.</p>
+        <form class="row" style="margin-top:12px" data-form="weight"><input type="number" name="kg" step="0.1" min="30" max="300" inputmode="decimal" placeholder="kg" required><button class="btn soft">Salva</button></form>
       </div>` : ''}
   </div>`;
 }
 
-function ring(pct, big, small) {
-  const C = 2 * Math.PI * 40;
-  return `<div class="ring"><svg viewBox="0 0 92 92"><circle class="track" cx="46" cy="46" r="40"/><circle class="val" cx="46" cy="46" r="40" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - pct)}"/></svg><div class="lbl"><div><b>${big}</b><small>${small}</small></div></div></div>`;
+/** elenco degli esercizi di una sessione, con miniatura */
+function exList(s, iso, lg, { check = false, swap = false } = {}) {
+  const doneItems = new Set(lg?.items || []);
+  return s.blocks.map((b, bi) => `
+    <div class="block">
+      <div class="block-head"><h4>${b.name}</h4><span class="small muted">${b.minutes} min</span></div>
+      ${b.note ? `<p class="block-note">${esc(b.note)}</p>` : ''}
+      ${b.items.map((it, ii) => {
+        const key = `${bi}:${ii}`;
+        const on = doneItems.has(key) || lg?.done;
+        return `<div class="ex ${on ? 'done' : ''}">
+          <button class="ex-main" data-action="open-ex" data-id="${it.id}" data-dose="${esc(it.dose)}" ${swap ? 'data-swap="1"' : ''}>
+            ${thumbHTML(it.id)}
+            <span class="ex-body"><span class="ex-name">${esc(it.name)}</span><span class="ex-dose">${esc(it.dose)}</span>
+            ${it.tag ? `<span class="tag">${esc(it.tag)}</span>` : ''}${it.basis ? `<span class="ex-basis">${esc(it.basis)}</span>` : ''}</span>
+          </button>
+          ${check ? `<button class="check ${on ? 'on' : ''}" data-action="toggle-item" data-key="${key}" data-iso="${iso}" aria-label="Fatto">✓</button>` : ''}
+        </div>`;
+      }).join('')}
+    </div>`).join('');
 }
 
 function sessionCard(s, iso, lg, moved) {
   const future = fromISO(iso) > fromISO(today()) || fromISO(iso) < fromISO(state.planStart);
-  const kind = TYPE_KIND[s.type];
-  const kindLabel = { forza: 'Forza', cardio: 'Cardio', mobilita: 'Mobilità' }[kind];
-  const kindChip = { forza: 'volt', cardio: 'cyan', mobilita: 'violet' }[kind];
-  const doneItems = new Set(lg.items || []);
-  const total = s.blocks.reduce((a, b) => a + b.items.length, 0);
-  const pct = lg.done ? 1 : doneItems.size / total;
-  let n = 0;
-  const blocks = s.blocks.map((b, bi) => `
-    <div class="block">
-      <div class="block-head"><h3>${b.name}</h3><span class="mono small muted">${b.minutes}′</span></div>
-      ${b.note ? `<p class="block-note">${esc(b.note)}</p>` : ''}
-      ${b.items.map((it, ii) => {
-        const key = `${bi}:${ii}`;
-        const on = doneItems.has(key) || lg.done;
-        n++;
-        return `<div class="ex ${on ? 'done' : ''}">
-          <span class="ex-idx">${String(n).padStart(2, '0')}</span>
-          <div class="ex-body" data-action="open-ex" data-id="${it.id}" data-dose="${esc(it.dose)}" data-swap="1">
-            <div class="ex-name">${esc(it.name)}</div>
-            <div class="ex-dose">${esc(it.dose)}</div>
-            ${it.tag ? `<span class="tag">${esc(it.tag)}</span>` : ''}${it.basis ? `<div class="ex-basis">◎ ${esc(it.basis)}</div>` : ''}
-          </div>
-          <div class="ex-tools">
-            <button class="icon-btn three" data-action="open-ex" data-id="${it.id}" data-dose="${esc(it.dose)}" data-swap="1" aria-label="Guarda in 3D">${ICON.cube}</button>
-            ${future ? '' : `<button class="check ${on ? 'on' : ''}" data-action="toggle-item" data-key="${key}" data-iso="${iso}" aria-label="Fatto">✓</button>`}
-          </div>
-        </div>`;
-      }).join('')}
-    </div>`).join('');
-
+  const ids = sessionIds(s);
+  const total = ids.length;
+  const nDone = lg.done ? total : (lg.items || []).length;
+  const cover = [...new Set(s.blocks.filter((b) => !/Riscaldamento|Defaticamento|Sblocco|Respiro/.test(b.name)).flatMap((b) => b.items.map((i) => i.id)).filter((id) => demoFor(id)))].slice(0, 3);
   let footer = '';
   if (lg.done) {
-    footer = `<div class="alert ok" style="margin-top:16px"><span>✓</span><span><b>Allenamento completato.</b> ${lg.feedback ? 'Sensazione: ' + lg.feedback + '.' : ''}</span></div>
-      <button class="link small" style="margin-top:10px" data-action="undo-done" data-iso="${iso}">Annulla</button>`;
+    footer = `<div class="alert ok"><span>✓</span><span><b>Allenamento completato.</b>${lg.feedback ? ` L’hai trovato ${lg.feedback}.` : ''}</span></div>
+      <button class="link small" data-action="undo-done" data-iso="${iso}">Annulla</button>`;
   } else if (!future) {
     footer = showFeedback
-      ? `<p style="margin-top:18px;font-weight:650">Com’è andata?</p>
-         <div class="feedback" style="margin-top:8px">
+      ? `<p class="fb-q">Com’è andata?</p>
+         <div class="feedback">
            <button data-action="done" data-iso="${iso}" data-fb="facile"><span>😌</span>Facile</button>
            <button data-action="done" data-iso="${iso}" data-fb="giusto"><span>💪</span>Giusto</button>
            <button data-action="done" data-iso="${iso}" data-fb="duro"><span>🥵</span>Duro</button>
          </div>`
-      : `<button class="link small" style="margin-top:16px" data-action="ask-feedback">Ho fatto l’allenamento senza la guida</button>`;
+      : '<button class="link small" data-action="ask-feedback">L’ho già fatto per conto mio</button>';
   }
-
   return `
-  <article class="card glow ${R(4)}">
-    <div class="session-hero">
-      ${ring(pct, lg.done ? '✓' : `${Math.round(pct * 100)}<span style="font-size:12px">%</span>`, lg.done ? 'FATTO' : `${doneItems.size}/${total}`)}
-      <div>
-        <div class="meta" style="margin-top:0"><span class="chip ${kindChip}">${kindLabel}</span><span class="chip">${s.minutes} min</span>${s.luogo ? `<span class="chip">${LUOGO_LABEL[s.luogo]}</span>` : ''}</div>
-        <h2 style="margin-top:10px">${esc(s.title)}</h2>
-        ${moved ? '<p class="small muted" style="margin-top:4px">Allenamento spostato a oggi</p>' : ''}
-      </div>
+  <article class="card session ${lg.done ? 'is-done' : ''} ${R(3)}">
+    ${cover.length ? `<div class="session-cover n${cover.length}">${cover.map((id) => `<img src="${demoFor(id).b}" alt="" decoding="async">`).join('')}</div>` : ''}
+    <div class="session-body">
+      <div class="meta"><span class="chip accent">${KIND_LABEL[s.kind] || 'Allenamento'}</span><span class="chip">${s.minutes} min</span>${s.luogo ? `<span class="chip">${LUOGO_LABEL[s.luogo]}</span>` : ''}</div>
+      <h2>${esc(s.title)}</h2>
+      <p class="small muted">${total} esercizi${nDone && !lg.done ? ` · ${nDone} già fatti` : ''}${moved ? ' · spostato a oggi' : ''}</p>
+      ${!future && !lg.done ? `<button class="btn primary wide" data-action="play" data-iso="${iso}">${ICON.play} ${nDone ? 'Riprendi l’allenamento' : 'Inizia l’allenamento'}</button>` : ''}
+      <details class="fold" ${lg.done || future ? '' : ''}>
+        <summary>Guarda gli esercizi</summary>
+        ${exList(s, iso, lg, { check: !future, swap: true })}
+      </details>
+      ${footer}
     </div>
-    ${!future && !lg.done ? `<button class="btn primary wide" style="margin-top:18px" data-action="play" data-iso="${iso}">${ICON.play} Avvia allenamento guidato</button>` : ''}
-    ${blocks}
-    ${footer}
   </article>`;
 }
 
@@ -705,7 +626,7 @@ function restCard(plan, iso, lg) {
   const d = derive(p);
   const steps = plan.habits.find((h) => h.key === 'passi');
   const mini = buildSession('mobilita', 10, p, d, new Date().getDate(), 1);
-  const items = mini.blocks[1].items.slice(0, 5);
+  const items = mini.blocks[1].items.slice(0, 4);
   const weekStart = addDays(fromISO(iso), -weekdayIndex(fromISO(iso)));
   const planStart = fromISO(state.planStart);
   let missed = plan.schedule
@@ -717,22 +638,33 @@ function restCard(plan, iso, lg) {
   if (isStart && !missed.length) missed = plan.schedule.filter((day) => day.session).slice(0, 1);
   const canMove = fromISO(iso) <= fromISO(today()) && fromISO(iso) >= planStart;
   return `
-  <article class="card ${R(4)}">
-    <span class="chip violet">Recupero attivo</span>
-    <h2 style="margin-top:12px">Giorno di riposo</h2>
-    <p class="muted" style="margin-top:6px">Il recupero fa parte dell’allenamento: è qui che il corpo si rinforza. Muoviti comunque in modo leggero.</p>
-    <div class="block">
-      <div class="block-head"><h3>Oggi</h3></div>
-      <div class="ex"><span class="ex-idx">01</span><div class="ex-body" data-action="open-ex" data-id="x_cammino"><div class="ex-name">Camminata all’aperto</div><div class="ex-dose">20–30 min · ${steps ? steps.target.toLocaleString('it-IT') : '8.000'} passi</div></div><div class="ex-tools"><button class="icon-btn three" data-action="open-ex" data-id="x_cammino" aria-label="3D">${ICON.cube}</button></div></div>
-      ${items.map((it, i) => `<div class="ex"><span class="ex-idx">${String(i + 2).padStart(2, '0')}</span><div class="ex-body" data-action="open-ex" data-id="${it.id}"><div class="ex-name">${esc(it.name)}</div><div class="ex-dose">${esc(it.dose)} · facoltativo</div></div><div class="ex-tools"><button class="icon-btn three" data-action="open-ex" data-id="${it.id}" aria-label="3D">${ICON.cube}</button></div></div>`).join('')}
+  <article class="card session rest ${R(3)}">
+    <div class="session-body">
+      <div class="meta"><span class="chip">Recupero</span></div>
+      <h2>Giorno di riposo</h2>
+      <p class="small muted">Il corpo si rinforza quando recupera. Muoviti comunque in modo leggero.</p>
+      <div class="ex"><button class="ex-main" data-action="open-ex" data-id="x_cammino">${thumbHTML('x_cammino')}<span class="ex-body"><span class="ex-name">Una camminata</span><span class="ex-dose">20–30 minuti · ${steps ? steps.target.toLocaleString('it-IT') : '8.000'} passi nella giornata</span></span></button></div>
+      <details class="fold"><summary>Se vuoi, 5 minuti di allungamento</summary>
+        ${items.map((it) => `<div class="ex"><button class="ex-main" data-action="open-ex" data-id="${it.id}">${thumbHTML(it.id)}<span class="ex-body"><span class="ex-name">${esc(it.name)}</span><span class="ex-dose">${esc(it.dose)}</span></span></button></div>`).join('')}
+      </details>
+      ${canMove && missed.length && !lg.done ? `
+        <p class="fb-q">${isStart ? 'Vuoi iniziare subito?' : 'Hai saltato un allenamento?'}</p>
+        <p class="small muted">${isStart ? 'Puoi fare oggi il primo:' : 'Puoi recuperarlo oggi:'}</p>
+        <div class="chips">${missed.map((m) => `<button data-action="move-session" data-from="${m.weekday}" data-iso="${iso}">${esc(m.session.title)} · ${m.session.minutes} min</button>`).join('')}</div>` : ''}
     </div>
-    ${canMove && missed.length && !lg.done ? `
-      <div class="block">
-        <div class="block-head"><h3>${isStart ? 'Vuoi iniziare subito?' : 'Hai saltato un allenamento?'}</h3></div>
-        <p class="small muted">${isStart ? 'Puoi fare oggi il primo allenamento:' : 'Puoi recuperarlo oggi:'}</p>
-        <div class="chips" style="margin-top:10px">${missed.map((m) => `<button data-action="move-session" data-from="${m.weekday}" data-iso="${iso}">${m.label} · ${esc(m.session.title)}</button>`).join('')}</div>
-      </div>` : ''}
   </article>`;
+}
+
+/** i pasti del giorno, in breve */
+function mealsCard(plan, wd) {
+  const day = plan.nutrition.menu?.days[wd];
+  if (!day?.meals.length) return '';
+  return `
+  <a class="card meals-card ${R(4)}" href="#/cibo" data-action="open-menu" data-day="${wd}">
+    <div class="row between"><h3>A tavola</h3><span class="small muted">${fmt(plan.nutrition.kcal)} kcal · ${plan.nutrition.protein} g proteine</span></div>
+    ${day.meals.map((m) => `<div class="meal-line"><span class="small muted">${m.label.replace(/ (di metà mattina|del pomeriggio)/, '')}</span><span>${esc(m.name)}</span></div>`).join('')}
+    <span class="link small">Vedi le porzioni →</span>
+  </a>`;
 }
 
 function habitsCard(plan, iso) {
@@ -741,129 +673,171 @@ function habitsCard(plan, iso) {
   const list = [
     ['passi', '👟', `${steps.target.toLocaleString('it-IT')} passi`],
     ['acqua', '💧', `${fmt(plan.nutrition.water, 1)} litri d’acqua`],
-    ['proteine', '🍳', `${plan.nutrition.protein} g di proteine`],
+    ['proteine', '🍳', 'Proteine a ogni pasto'],
     ['sonno', '😴', 'Almeno 7 ore di sonno'],
   ];
   const done = list.filter(([k]) => h[k]).length;
   return `
   <div class="card ${R(5)}">
-    <div class="row between"><h3>Abitudini di oggi</h3><span class="mono small ${done === 4 ? 'grad-text' : 'muted'}">${done}/4</span></div>
-    <div style="margin-top:6px">
-      ${list.map(([k, ic, l]) => `<div class="habit"><button class="check ${h[k] ? 'on' : ''}" data-action="habit" data-key="${k}" aria-label="${l}">✓</button><span class="grow">${l}</span><span>${ic}</span></div>`).join('')}
-    </div>
+    <div class="row between"><h3>Le piccole cose di oggi</h3><span class="small ${done === 4 ? 'ok-text' : 'muted'}">${done} di 4</span></div>
+    <div class="habits">${list.map(([k, ic, l]) => `<button class="habit ${h[k] ? 'on' : ''}" data-action="habit" data-key="${k}" aria-pressed="${!!h[k]}"><span>${ic}</span>${l}</button>`).join('')}</div>
   </div>`;
 }
 
 // ==================================================================
-// Piano
+// Allenamento: la settimana e il perché
 // ==================================================================
 
-const LUOGO_LABEL = { palestra: 'Palestra', casa: 'Casa', aperto: 'All’aperto' };
 const BLOCK_LABELS = { impatto: 'salti e corsa', supino: 'esercizi sdraiati sulla schiena', prono: 'esercizi a pancia in giù', valsalva: 'carichi massimali', testaGiu: 'posizioni a testa in giù', flessioneCarico: 'flessioni del busto sotto carico' };
 
-function viewPlan() {
+function viewTraining() {
   const p = state.profile;
   const plan = getPlan();
-  const goal = GOALS.find((g) => g.id === p.obiettivo);
   const t = plan.timeline;
   const n = plan.nutrition;
-  const weekly = plan.schedule.filter((d) => d.session).length * p.minuti;
-
-  const pctP = Math.round((n.protein * 4 / n.kcal) * 100);
-  const pctC = Math.round((n.carbs * 4 / n.kcal) * 100);
-  const pctF = 100 - pctP - pctC;
-  const donut = `conic-gradient(var(--volt) 0 ${pctP}%, var(--cyan) ${pctP}% ${pctP + pctC}%, var(--violet) ${pctP + pctC}% 100%)`;
-  const modeLabel = { deficit: 'Deficit moderato', surplus: 'Leggero surplus', mantenimento: 'Mantenimento' }[n.mode];
-
+  const find = plan.diagnosi.findings.slice(0, 3);
+  const todayWd = weekdayIndex(new Date());
   return `
-  <header class="hdr ${R(0)}"><div><p class="kicker">Il tuo piano · sett ${plan.week}</p><h1>${goal.icon} ${goal.label}</h1></div></header>
-  <div class="stack" style="margin-top:16px">
-    <section class="card glow hero-plan ${R(1)}">
-      <div class="orbit"></div>
-      ${t.hasWeight ? `
-        <p class="kicker">Traguardo stimato</p>
-        <div class="big-num" style="margin-top:8px"><span data-count="${n.target}" data-dec="1">${fmt(n.target, 1)}</span><small>kg</small></div>
-        <p style="margin-top:8px">intorno al <b class="grad-text">${formatDate(t.eta)}</b></p>
-        <p class="mono small muted" style="margin-top:4px">${t.weeks} SETTIMANE · ${fmt(t.rate, 2)} KG/SETT</p>
-        <div class="milestones">${t.milestones.slice(0, 8).map((m) => `<div>sett ${m.week}<b>${fmt(m.kg, 1)}</b></div>`).join('')}</div>`
-      : `<p class="kicker">Ogni settimana</p>
-        <div class="big-num" style="margin-top:8px"><span data-count="${weekly}">${weekly}</span><small>min</small></div>`}
-      <div class="meta" style="margin-top:16px"><span class="chip volt">${p.giorni} allenamenti</span><span class="chip cyan">${p.minuti} min l’uno</span>${p.traguardo ? `<span class="chip violet">${esc(p.traguardo)}</span>` : ''}</div>
-      <p class="small muted" style="margin-top:14px">${esc(t.message)}</p>
-    </section>
-    ${t.warning ? `<div class="alert attenzione ${R(2)}"><span>⏳</span><span>${esc(t.warning)}</span></div>` : ''}
-    ${plan.alerts.map((a, i) => `<div class="alert ${a.level} ${R(2 + i)}"><span>${a.level === 'stop' ? '⚠︎' : 'ℹ︎'}</span><span>${esc(a.text)}</span></div>`).join('')}
+  ${hdr('Il tuo allenamento', `Settimana ${plan.week} · ${plan.phase.label.toLowerCase()}`)}
+  <div class="stack">
+    <a class="card why-card ${R(1)}" href="#/perche">
+      <div class="row between"><h3>Perché questo piano</h3>${ICON.next}</div>
+      ${find.length ? find.map((f) => `<div class="why-line"><span>${f.icon}</span><span>${esc(f.title)}</span></div>`).join('') : `<p class="small muted">${esc(plan.summary?.[0]?.text || '')}</p>`}
+      <span class="link small">Leggi l’analisi completa</span>
+    </a>
+    ${plan.alerts.filter((a) => a.level === 'stop').map((a) => `<div class="alert stop"><span>⚠️</span><span>${esc(a.text)}</span></div>`).join('')}
   </div>
 
-  ${plan.summary?.length ? `<div class="section-title"><h2>Il tuo piano in breve</h2></div>
-  <section class="card">${plan.summary.map((f) => `<div class="tip"><span class="ti">${f.icon}</span><div><b>${esc(f.title)}</b><p class="small muted" style="margin-top:2px">${esc(f.text)}</p></div></div>`).join('')}</section>` : ''}
+  <div class="section-title"><h2>La tua settimana</h2></div>
+  <p class="small muted section-note">${esc(plan.phase.note)}</p>
+  <div class="week">
+  ${plan.schedule.map((d, i) => (d.session ? `
+    <details class="day ${i === todayWd ? 'is-today' : ''} ${R(Math.min(i, 5))}">
+      <summary><span class="day-label">${d.label}</span><span class="grow"><b>${esc(d.session.title)}</b><span class="small muted">${d.session.minutes} min · ${sessionIds(d.session).length} esercizi${d.session.luogo ? ` · ${LUOGO_LABEL[d.session.luogo].toLowerCase()}` : ''}</span></span></summary>
+      <div class="day-body">${exList(d.session, null, null)}</div>
+    </details>` : `<div class="day-rest"><span class="day-label">${d.label}</span><span class="small muted">Riposo · una camminata</span></div>`)).join('')}
+  </div>
 
   ${hasGym() ? `<div class="section-title"><h2>La tua palestra</h2></div>${gymCard()}` : ''}
 
-  <div class="section-title"><h2>La settimana</h2><span class="chip cyan">${plan.phase.label}</span></div>
-  <p class="small muted" style="margin:0 2px 12px">${esc(plan.phase.note)}</p>
-  ${plan.schedule.map((d, i) => d.session ? `
-    <details class="day ${R(i)}">
-      <summary><span class="day-label">${d.label}</span><span class="grow"><b>${esc(d.session.title)}</b><br><span class="small muted">${d.session.minutes} min · ${d.session.blocks.reduce((a, b) => a + b.items.length, 0)} esercizi${d.session.luogo ? ' · ' + LUOGO_LABEL[d.session.luogo] : ''}</span></span></summary>
-      <div class="day-body">${d.session.blocks.map((b) => `
-        <div class="block"><div class="block-head"><h3>${b.name}</h3><span class="mono small muted">${b.minutes}′</span></div>
-        ${b.note ? `<p class="block-note">${esc(b.note)}</p>` : ''}
-        ${b.items.map((it) => `<div class="ex"><div class="ex-body" data-action="open-ex" data-id="${it.id}" data-dose="${esc(it.dose)}"><div class="ex-name">${esc(it.name)}</div><div class="ex-dose">${esc(it.dose)}</div>${it.tag ? `<span class="tag">${esc(it.tag)}</span>` : ''}</div><div class="ex-tools"><button class="icon-btn three" data-action="open-ex" data-id="${it.id}" data-dose="${esc(it.dose)}" aria-label="3D">${ICON.cube}</button></div></div>`).join('')}</div>`).join('')}
-      </div>
-    </details>` : `<div class="day-rest ${R(i)}"><span class="day-label">${d.label}</span><span>Riposo attivo · camminata</span></div>`).join('')}
-
-  <div class="section-title"><h2>Alimentazione</h2><span class="chip">${modeLabel}</span></div>
+  ${t.hasWeight ? `<div class="section-title"><h2>Il traguardo</h2></div>
   <section class="card">
-    <div class="macro-wrap">
-      <div class="donut" style="background:${donut}"><div class="c"><div><b data-count="${n.kcal}">${n.kcal}</b><small>KCAL/GIORNO</small></div></div></div>
-      <div class="legend-list">
-        <div><span><i style="background:var(--volt)"></i>Proteine</span><b>${n.protein} g</b></div>
-        <div><span><i style="background:var(--cyan)"></i>Carboidrati</span><b>${n.carbs} g</b></div>
-        <div><span><i style="background:var(--violet)"></i>Grassi</span><b>${n.fat} g</b></div>
-        <div class="muted small"><span>${pctP}% · ${pctC}% · ${pctF}%</span></div>
-      </div>
-    </div>
-    ${state.calorieAdjust ? `<p class="small muted" style="margin-top:10px">Include un aggiustamento di ${state.calorieAdjust > 0 ? '+' : ''}${state.calorieAdjust} kcal dai tuoi progressi. <button class="link" data-action="reset-kcal">Azzera</button></p>` : ''}
-    <div style="margin-top:14px">
-      <div class="list-row"><span>Metabolismo basale</span><span>${n.bmr.toLocaleString('it-IT')} kcal</span></div>
-      <div class="list-row"><span>Consumo totale stimato</span><span>${n.tdee.toLocaleString('it-IT')} kcal</span></div>
-      <div class="list-row"><span>Acqua</span><span>${fmt(n.water, 1)} L (+0,5 nei giorni di allenamento)</span></div>
-      <div class="list-row"><span>Fibre</span><span>almeno ${n.fiber} g</span></div>
-    </div>
-    ${n.notes.map((x) => `<div class="alert info" style="margin-top:10px"><span>💡</span><span>${esc(x)}</span></div>`).join('')}
-  </section>
+    <div class="goal-line"><div><span class="small muted">Oggi</span><b>${fmt(latestWeight(), 1)} kg</b></div><span class="goal-arrow">→</span><div><span class="small muted">${formatDate(t.eta)}</span><b>${fmt(n.target, 1)} kg</b></div></div>
+    <p class="small muted">${esc(t.message)}</p>
+    ${t.warning ? `<div class="alert attenzione"><span>⏳</span><span>${esc(t.warning)}</span></div>` : ''}
+  </section>` : ''}
 
-  <div class="section-title"><h2>Giornata tipo</h2><span class="chip">${DIET_LABEL[n.dieta] || 'Onnivora'}</span></div>
-  <section class="card">
-    ${n.meals.meals.map((m) => `<div class="meal"><div class="row between"><b>${m.label}</b><span class="mono small" style="color:var(--volt)">${m.protein} g prot.</span></div>
-      <ul>${m.items.map((i) => `<li><span>${esc(i.name)}</span><span class="mono small muted">${i.grams} g</span></li>`).join('')}</ul></div>`).join('')}
-    <p class="small muted" style="margin-top:10px">Porzioni calcolate per arrivare a ~${n.meals.total} g di proteine. Carboidrati e condimenti (olio extravergine) da regolare sulle calorie del giorno.</p>
-  </section>
-  ${n.dietTips.length ? `<section class="card" style="margin-top:12px">${n.dietTips.map((t) => `<div class="tip"><span class="ti">${t.icon}</span><div><b>${esc(t.title)}</b><p class="small muted" style="margin-top:2px">${esc(t.text)}</p></div></div>`).join('')}
-    <p class="small muted" style="margin-top:6px">Indicazioni generali: per integratori e dosi confrontati con il medico.</p></section>` : ''}
+  <div class="stack" style="margin-top:20px">
+    <a class="card step-card" href="#/esercizi"><span class="step-ico">📚</span><div><b>Tutti gli esercizi</b><p class="small muted">${EXERCISES.length} esercizi spiegati passo passo, ${EXERCISES.filter((e) => demoFor(e.id)).length} con foto reali.</p></div>${ICON.next}</a>
+    <a class="card step-card" href="#/partenza"><span class="step-ico">📏</span><div><b>Il tuo punto di partenza</b><p class="small muted">Test, composizione corporea e livelli.</p></div>${ICON.next}</a>
+  </div>
+  <p class="disclaimer">Ritmo dà indicazioni generali e non sostituisce medici, fisioterapisti o nutrizionisti. Se senti dolore, fermati.</p>`;
+}
 
-  <div class="section-title"><h2>Abitudini</h2></div>
-  <section class="card">
-    ${plan.habits.map((h) => `<div class="tip"><span class="ti">${h.icon}</span><div><b>${esc(h.title)}</b><p class="small muted" style="margin-top:2px">${esc(h.text)}</p></div></div>`).join('')}
-  </section>
+// ==================================================================
+// Perché questo piano: cosa ho capito di te
+// ==================================================================
 
-  <div class="section-title"><h2>Personalizzazione</h2><a class="link small" href="#/partenza">Punto di partenza →</a></div>
+function viewWhy() {
+  const p = state.profile;
+  const plan = getPlan();
+  const dg = plan.diagnosi;
+  const nuovo = justFinished;
+  const sogni = SOGNI.filter((s) => (p.sogni || []).includes(s.id)).map((s) => s.label.toLowerCase());
+  return `
+  ${nuovo ? `<div class="why-hero ${R(0)}"><p class="kicker">Il tuo piano è pronto</p><h1>Ecco cosa ho capito di te${p.nome ? `, ${esc(p.nome)}` : ''}</h1></div>` : subHdr('Perché questo piano', '#/allenamento')}
+  ${coach(esc(sogni.length ? `Vuoi ${sogni.join(', ')}. Ho guardato le tue risposte una per una: qui sotto trovi cosa ho trovato e cosa cambia, per questo, nel tuo piano.` : 'Ho guardato le tue risposte una per una: qui sotto trovi cosa ho trovato e cosa cambia, per questo, nel tuo piano.'), R(1))}
+
+  <div class="stack" style="margin-top:16px">
+    ${dg.findings.map((f, i) => `
+      <section class="card finding ${R(Math.min(i + 2, 6))}">
+        <div class="finding-head"><span class="ti">${f.icon}</span><h3>${esc(f.title)}</h3></div>
+        <p class="small muted">${esc(f.text)}</p>
+        <p class="finding-effect"><b>Nel tuo piano</b>${esc(f.effect)}</p>
+      </section>`).join('')}
+    ${plan.alerts.map((a) => `<div class="alert ${a.level}"><span>${a.level === 'stop' ? '⚠️' : 'ℹ️'}</span><span>${esc(a.text)}</span></div>`).join('')}
+  </div>
+
+  ${plan.summary?.length ? `<div class="section-title"><h2>Il piano in breve</h2></div><section class="card">${tips(plan.summary)}</section>` : ''}
+
+  <div class="section-title"><h2>Come l’ho adattato a te</h2></div>
+  <section class="card">${tips(plan.personal)}</section>
   ${precisionCard()}
-  <section class="card" style="margin-top:12px">
-    ${plan.personal.map((f) => `<div class="tip"><span class="ti">${f.icon}</span><div><b>${esc(f.title)}</b><p class="small muted" style="margin-top:2px">${esc(f.text)}</p></div></div>`).join('')}
-  </section>
-  ${kpiSection(plan)}
 
-  <div class="section-title"><h2>Parametri di base</h2></div>
-  <section class="card">
+  ${nuovo ? `<div class="wizard-actions"><button class="btn primary" data-action="why-go">Vediamo il piano</button></div>` : `
+  <details class="card fold" style="margin-top:12px"><summary><b>Parametri tecnici</b></summary>
     <div class="list-row"><span>BMI</span><span>${fmt(plan.derived.bmi, 1)} · ${bmiLabel(plan.derived.bmi)}</span></div>
-    <div class="list-row"><span>Livello esercizi</span><span>${['', 'Base', 'Intermedio', 'Avanzato'][plan.derived.level]}</span></div>
-    <div class="list-row"><span>FC massima stimata</span><span>${plan.derived.hrMax} bpm</span></div>
+    <div class="list-row"><span>Livello degli esercizi</span><span>${['', 'Base', 'Intermedio', 'Avanzato'][plan.derived.level]}</span></div>
+    <div class="list-row"><span>Frequenza cardiaca massima stimata</span><span>${plan.derived.hrMax} bpm</span></div>
     <div class="list-row"><span>Alta intensità</span><span>${plan.derived.hiitOk ? 'Sì' : 'No, solo moderata'}</span></div>
     ${plan.derived.blocked.length ? `<div class="list-row"><span>Esclusi per te</span><span>${plan.derived.blocked.map((b) => BLOCK_LABELS[b]).join(', ')}</span></div>` : ''}
-    ${p.condizioni?.length ? `<div class="list-row"><span>Condizioni</span><span>${p.condizioni.map((c) => CONDITIONS.find((x) => x.id === c)?.label).join(', ')}</span></div>` : ''}
-  </section>
-  <p class="disclaimer">Ritmo fornisce indicazioni generali e non sostituisce medici, fisioterapisti o nutrizionisti. Se senti dolore, fermati.</p>`;
+  </details>`}
+  <p class="disclaimer">Le mie sono indicazioni generali: non sostituiscono medico, fisioterapista o nutrizionista.</p>`;
+}
+
+// ==================================================================
+// Alimentazione
+// ==================================================================
+
+function viewFood() {
+  const plan = getPlan();
+  const n = plan.nutrition;
+  const menu = n.menu;
+  if (menuDay === null) menuDay = weekdayIndex(new Date());
+  const day = menu.days[menuDay];
+  const diff = n.kcal - n.tdee;
+  const modo = n.mode === 'deficit'
+    ? `Circa ${fmt(Math.abs(diff), 0)} kcal in meno di quelle che consumi: abbastanza per perdere ${fmt(n.rate, 1)} kg a settimana senza soffrire la fame.`
+    : n.mode === 'surplus' ? `Circa ${fmt(Math.abs(diff), 0)} kcal in più di quelle che consumi, per dare ai muscoli il materiale per crescere.`
+      : 'Le stesse calorie che consumi: non serve mangiare meno, serve mangiare meglio e con più proteine.';
+  const bar = (label, g, kcal, cls) => `<div class="macro"><div class="row between"><span>${label}</span><b>${g} g</b></div><div class="bar ${cls}"><i style="width:${Math.round((kcal / n.kcal) * 100)}%"></i></div></div>`;
+  return `
+  ${hdr('La tua alimentazione', DIET_LABEL[n.dieta] || 'Onnivora')}
+  <div class="stack">
+    <section class="card kcal-card ${R(1)}">
+      <div class="kcal-num"><b data-count="${n.kcal}">${fmt(n.kcal)}</b><span>kcal al giorno</span></div>
+      <p class="small muted">${modo}</p>
+      <div class="macros">
+        ${bar('Proteine', n.protein, n.protein * 4, 'p')}
+        ${bar('Carboidrati', n.carbs, n.carbs * 4, 'c')}
+        ${bar('Grassi', n.fat, n.fat * 9, 'f')}
+      </div>
+      ${state.calorieAdjust ? `<p class="small muted">Include un aggiustamento di ${state.calorieAdjust > 0 ? '+' : ''}${state.calorieAdjust} kcal dai tuoi progressi. <button class="link" data-action="reset-kcal">Azzera</button></p>` : ''}
+    </section>
+    ${coach('Non devi pesare tutto per sempre: segui le porzioni per due settimane e l’occhio impara da solo.', R(2))}
+  </div>
+
+  <div class="section-title"><h2>Il tuo menu</h2></div>
+  <nav class="daypick ${R(3)}" aria-label="Giorno">${WEEKDAYS.map((l, i) => `<button data-action="menu-day" data-day="${i}" class="${i === menuDay ? 'on' : ''}">${l}</button>`).join('')}</nav>
+  <div class="stack" id="menu-day">
+    ${day.meals.map((m) => `
+      <section class="card meal">
+        <div class="row between"><span class="kicker">${m.label}</span><span class="small muted">${fmt(m.kcal)} kcal · ${m.protein} g prot.</span></div>
+        <h3>${esc(m.name)}</h3>
+        ${m.items.length ? `<ul class="portions">${m.items.map((i) => `<li class="${i.plus ? 'plus' : ''}"><span>${i.plus ? '+ ' : ''}${esc(i.name)}</span><b>${esc(i.label)}</b></li>`).join('')}</ul>` : ''}
+        ${m.fuori ? `<p class="small muted">${esc(m.nota)}</p>` : ''}
+      </section>`).join('')}
+    <p class="small muted" style="text-align:center">Totale del giorno: circa ${fmt(Math.round(day.kcal / 10) * 10)} kcal e ${Math.round(day.protein)} g di proteine. Pasta, riso e cereali pesati a crudo; legumi già cotti.${day.meals.some((m) => m.items.some((i) => i.plus)) ? ' Le voci con “+” sono aggiunte che ti portano alle proteine del giorno.' : ''}</p>
+  </div>
+
+  ${n.regole.length ? `<div class="section-title"><h2>Le tue regole</h2></div><section class="card">${tips(n.regole)}</section>` : ''}
+
+  <div class="section-title"><h2>Per organizzarti</h2></div>
+  <div class="stack">
+    <details class="card fold"><summary><b>Lista della spesa della settimana</b></summary>
+      <ul class="portions">${menu.spesa.map((s) => `<li><span>${esc(s.name)}</span><b>${esc(s.qty)}</b></li>`).join('')}</ul>
+    </details>
+    <details class="card fold"><summary><b>Come ho fatto i conti</b></summary>
+      <div class="list-row"><span>Metabolismo a riposo</span><span>${fmt(n.bmr)} kcal</span></div>
+      <div class="list-row"><span>Consumo totale stimato</span><span>${fmt(n.tdee)} kcal</span></div>
+      <div class="list-row"><span>Acqua</span><span>${fmt(n.water, 1)} litri, mezzo in più quando ti alleni</span></div>
+      <div class="list-row"><span>Fibre</span><span>almeno ${n.fiber} g</span></div>
+      ${n.notes.map((x) => `<p class="small muted" style="margin-top:8px">${esc(x)}</p>`).join('')}
+    </details>
+    ${n.dietTips.length ? `<details class="card fold"><summary><b>Integrazioni da valutare</b></summary>${tips(n.dietTips)}<p class="small muted">Per integratori e dosi confrontati con il medico.</p></details>` : ''}
+    <a class="card step-card" href="#/inizio" data-action="edit-section" data-step="dieta"><span class="step-ico">✏️</span><div><b>Cambia le tue abitudini a tavola</b><p class="small muted">Tipo di dieta, pasti, cibi che non mangi.</p></div>${ICON.next}</a>
+  </div>
+  <p class="disclaimer">Menu indicativo per persone sane. Con patologie, gravidanza o allergie fatti seguire da un medico o da un dietista.</p>`;
 }
 
 // ==================================================================
@@ -891,40 +865,15 @@ function beginAssessment() {
   });
 }
 
-function assessCard() {
-  const since = daysSinceAssess();
-  const pr = precisionNow();
-  if (since === null) {
-    return `<a href="#/valutazione" class="card glow ${R(3)}" style="display:block;text-decoration:none">
-      <div class="row between"><span class="chip cyan live"><i></i>Da fare</span><span class="mono small muted">PRECISIONE ${pr.pct}%</span></div>
-      <h2 style="margin-top:12px">Misura il tuo punto di partenza</h2>
-      <p class="muted small" style="margin-top:6px">15 minuti di test guidati in 3D: il piano userà i tuoi risultati per livelli, dosi, correttivi e traguardi. Precisione stimata dopo i test: oltre 85%.</p>
-      <div class="prec-bar" style="margin-top:14px"><i style="width:${pr.pct}%"></i><b style="left:88%"></b></div>
-    </a>`;
-  }
-  if (since >= 28) {
-    return `<a href="#/valutazione" class="card glow ${R(3)}" style="display:block;text-decoration:none">
-      <span class="chip volt live"><i></i>Test di controllo</span>
-      <h2 style="margin-top:12px">Sono passate ${Math.floor(since / 7)} settimane</h2>
-      <p class="muted small" style="margin-top:6px">Rifai i test per misurare i progressi reali e aggiornare livelli e dosi.</p>
-    </a>`;
-  }
-  return '';
-}
-
 function precisionCard() {
   const pr = precisionNow();
-  const top = pr.missing.sort((a, b) => b.gain - a.gain).slice(0, 4);
-  return `<section class="card glow">
-    <div class="session-hero">
-      ${ring(pr.pct / 100, `${pr.pct}<span style="font-size:12px">%</span>`, 'PRECISIONE')}
-      <div>
-        <h3>Precisione del piano</h3>
-        <p class="small muted" style="margin-top:4px">Quanto il piano si basa su dati misurati su di te invece che su stime generiche.</p>
-      </div>
-    </div>
-    ${top.length ? `<p class="sub-h">Per aumentarla</p>${top.map((m) => `<div class="list-row"><span>${esc(m.label)}</span><span class="mono" style="color:var(--volt)">+${m.gain}%</span></div>`).join('')}
-    <a class="btn ghost wide" style="margin-top:12px" href="#/valutazione">${state.assess.length ? 'Completa i test' : 'Fai la valutazione'}</a>` : ''}
+  const top = pr.missing.sort((a, b) => b.gain - a.gain).slice(0, 3);
+  return `<section class="card" style="margin-top:12px">
+    <div class="row between"><h3>Quanto ti conosco</h3><b class="accent-text">${pr.pct}%</b></div>
+    <div class="bar" style="margin-top:8px"><i style="width:${pr.pct}%"></i></div>
+    <p class="small muted">Quanto il piano si basa su dati misurati su di te e non su stime.</p>
+    ${top.length ? `${top.map((m) => `<div class="list-row"><span>${esc(m.label)}</span><span class="accent-text">+${m.gain}%</span></div>`).join('')}
+    <a class="btn soft wide" style="margin-top:12px" href="#/valutazione">${state.assess.length ? 'Completa i test' : 'Fai i test (10 minuti)'}</a>` : ''}
   </section>`;
 }
 
@@ -944,7 +893,7 @@ function kpiSection(plan, progress = false) {
       const pg = kpiProgress(k, c);
       const eta = formatDate(toISO(addDays(fromISO(state.planStart), k.weeks * 7)));
       return `<div class="kpi">
-        <div class="row between"><b>${k.label}</b><span class="mono small muted">entro ${eta}</span></div>
+        <div class="row between"><b>${k.label}</b><span class="small muted">entro ${eta}</span></div>
         <div class="kpi-vals"><span>${f(k, k.base)}</span><span class="kpi-arrow">→</span><span class="kpi-target">${f(k, k.target)} ${k.unit}</span>${progress && c !== null ? `<span class="kpi-now">oggi ${f(k, c)}</span>` : ''}</div>
         <div class="bar"><i style="width:${Math.max(0, Math.min(100, (pg ?? 0) * 100))}%"></i></div>
         ${k.note ? `<p class="small muted" style="margin-top:4px">${esc(k.note)}</p>` : ''}
@@ -982,15 +931,15 @@ function viewStart() {
   const b = cp.body;
   const TEST_ORDER = ['pushup', 'hang', 'chair', 'plank', 'cardioSelf', 'step', 'toetouch', 'shoulder', 'ankle', 'squatdeep', 'balance'];
   const unit = { pushup: 'rip.', hang: 's', chair: 'alzate', plank: 's', step: 'bpm', ankle: 'cm', balance: 's', cardioSelf: '/5', toetouch: '/5', shoulder: '/5', squatdeep: '/5' };
-  const lvChip = (l) => `<span class="chip ${l >= 4 ? 'volt' : l === 3 ? 'cyan' : 'hot'}">${LEVEL_LABEL[l]}</span>`;
+  const lvChip = (l) => `<span class="chip ${l >= 4 ? 'ok' : l === 3 ? '' : 'warn'}">${LEVEL_LABEL[l]}</span>`;
   const summary = [];
   if (cp.strong.length) summary.push(`I tuoi punti di forza: <b>${cp.strong.map((a) => a.label.toLowerCase()).join(' e ')}</b>.`);
   if (cp.weak.length) summary.push(`Da migliorare per primi: <b>${cp.weak.map((a) => a.label.toLowerCase()).join(' e ')}</b>.`);
   return `
-  <header class="hdr ${R(0)}"><div><p class="kicker">${state.assess.length ? 'Aggiornato al ' + formatDate(state.assess[state.assess.length - 1].date) : 'Nessun test ancora'}</p><h1>Punto di partenza</h1></div></header>
-  <section class="card glow ${R(1)}" style="margin-top:16px">
+  ${subHdr('Il tuo punto di partenza', '#/progressi', state.assess.length ? `Aggiornato al ${formatDate(state.assess[state.assess.length - 1].date)}` : 'Nessun test ancora')}
+  <section class="card ${R(1)}">
     ${radar(cp.areas, first?.areas)}
-    ${first ? '<div class="legend" style="justify-content:center"><span><i style="background:var(--volt)"></i>Oggi</span><span><i style="background:var(--ink-3)"></i>Valutazione iniziale</span></div>' : ''}
+    ${first ? '<div class="legend" style="justify-content:center"><span><i style="background:var(--accent)"></i>Oggi</span><span><i style="background:var(--ink-3)"></i>All’inizio</span></div>' : ''}
     ${summary.length ? `<p style="margin-top:12px">${summary.join(' ')}</p>` : '<p class="muted" style="margin-top:12px">Fai i test per completare il tuo profilo.</p>'}
   </section>
   ${precisionCard()}
@@ -998,15 +947,15 @@ function viewStart() {
   <div class="section-title"><h2>Composizione corporea</h2></div>
   <section class="card ${R(2)}">
     <div class="stats">
-      <div class="stat"><b>${b.bf !== null ? fmt(b.bf, 1) : '–'}<small style="font-size:14px">${b.bf !== null ? '%' : ''}</small></b><span>massa grassa</span></div>
+      <div class="stat"><b>${b.bf !== null ? fmt(b.bf, 1) : '–'}<small>${b.bf !== null ? '%' : ''}</small></b><span>massa grassa</span></div>
       <div class="stat"><b>${b.leanMass !== null ? fmt(b.leanMass, 1) : '–'}</b><span>kg magri</span></div>
       <div class="stat"><b>${b.whtr ? b.whtr.toLocaleString('it-IT') : '–'}</b><span>vita/altezza</span></div>
     </div>
     <div style="margin-top:10px">
-      ${b.bfLabel ? `<div class="list-row"><span>Massa grassa</span><span>${b.bfLabel} · ${fmt(b.fatMass, 1)} kg</span></div>` : '<div class="list-row"><span>Massa grassa</span><span>servono vita e collo' + (p.sesso === 'F' ? ' e fianchi' : '') + '</span></div>'}
+      ${b.bfLabel ? `<div class="list-row"><span>Massa grassa</span><span>${b.bfLabel} · ${fmt(b.fatMass, 1)} kg</span></div>` : `<div class="list-row"><span>Massa grassa</span><span>servono vita e collo${p.sesso === 'F' ? ' e fianchi' : ''}</span></div>`}
       ${b.whtrLabel ? `<div class="list-row"><span>Grasso addominale</span><span>${b.whtrLabel}</span></div>` : ''}
       <div class="list-row"><span>BMI</span><span>${fmt(b.bmi, 1)} · ${bmiLabel(b.bmi)}</span></div>
-      ${b.hrRest ? `<div class="list-row"><span>FC a riposo</span><span>${b.hrRest} bpm · ${['', 'alta', 'da migliorare', 'nella media', 'buona', 'ottima'][b.hrLevel]}</span></div>` : ''}
+      ${b.hrRest ? `<div class="list-row"><span>Battiti a riposo</span><span>${b.hrRest} bpm · ${['', 'alti', 'da migliorare', 'nella media', 'buoni', 'ottimi'][b.hrLevel]}</span></div>` : ''}
       ${b.pas ? `<div class="list-row"><span>Pressione</span><span>${b.pas}/${b.pad ?? '–'} mmHg</span></div>` : ''}
     </div>
   </section>
@@ -1025,11 +974,6 @@ function viewStart() {
     }).join('') || '<p class="muted">Ancora nessun test.</p>'}
     <a class="btn primary wide" style="margin-top:14px" href="#/valutazione">${state.assess.length ? 'Rifai o completa i test' : 'Inizia i test'}</a>
   </section>
-
-  <div class="section-title"><h2>Cosa cambia nel tuo piano</h2></div>
-  <section class="card ${R(4)}">
-    ${plan.personal.map((f) => `<div class="tip"><span class="ti">${f.icon}</span><div><b>${esc(f.title)}</b><p class="small muted" style="margin-top:2px">${esc(f.text)}</p></div></div>`).join('')}
-  </section>
   ${kpiSection(plan)}
   <p class="disclaimer">I valori di riferimento sono indicativi (ACSM, YMCA, Senior Fitness Test, formula U.S. Navy) e servono a orientare il piano, non a fare diagnosi.</p>`;
 }
@@ -1045,8 +989,8 @@ function bmiLabel(b) {
 // La tua scheda di palestra: cosa tenere, cambiare, togliere, aggiungere
 // ==================================================================
 
-const GYM_PLACEHOLDER = 'Un esercizio per riga, anche con serie e carichi:\nPanca piana 4x8 60 kg\nLat machine 3x10\nLeg press\nCurl bicipiti\nCrunch';
-const VERDICT_CLASS = { tieni: 'ok', cautela: 'cyan', cambia: 'hot', riduci: 'violet', togli: 'hot', sconosciuto: '' };
+const GYM_PLACEHOLDER = 'Un esercizio per riga, anche con serie e carichi:\nPanca piana 4x8 60 kg\nLat machine 3x10\nLeg press';
+const VERDICT_CLASS = { tieni: 'ok', cautela: '', cambia: 'warn', riduci: '', togli: 'warn', sconosciuto: '' };
 
 function gymAnalysisHTML(text) {
   const r = gymReview(text);
@@ -1054,18 +998,18 @@ function gymAnalysisHTML(text) {
   const ex = (id, name) => (id ? `<button type="button" class="link" data-action="open-ex" data-id="${id}">${esc(name)}</button>` : esc(name));
   const counts = r.items.reduce((a, x) => { a[x.verdict] = (a[x.verdict] || 0) + 1; return a; }, {});
   return `
-    <div class="row between"><b>Analisi della tua scheda</b><span class="chip ${r.coverage >= 80 ? 'volt' : r.coverage >= 50 ? 'cyan' : 'hot'}">Copertura ${r.coverage}%</span></div>
+    <div class="row between"><b>Analisi della tua scheda</b><span class="chip ${r.coverage >= 80 ? 'ok' : r.coverage >= 50 ? '' : 'warn'}">Copertura ${r.coverage}%</span></div>
     <p class="small muted" style="margin-top:6px">${Object.entries(counts).map(([k, n]) => `${n} ${VERDICT_COUNT[k]}`).join(' · ')}${r.add.length ? ` · ${r.add.length} da aggiungere` : ''}</p>
     <div class="gym-list">${r.items.map((x) => `
       <div class="gym-item v-${x.verdict}">
         <div class="row between"><b>${x.entry?.id ? ex(x.entry.id, x.name) : esc(x.name)}</b><span class="chip ${VERDICT_CLASS[x.verdict]}">${VERDICT_LABEL[x.verdict]}</span></div>
-        ${x.sets || x.kg ? `<p class="mono small muted">${x.sets ? `${x.sets}×${x.reps}` : ''}${x.kg ? ` · ${fmt(x.kg, x.kg % 1 ? 1 : 0)} kg` : ''}</p>` : ''}
+        ${x.sets || x.kg ? `<p class="small muted">${x.sets ? `${x.sets}×${x.reps}` : ''}${x.kg ? ` · ${fmt(x.kg, x.kg % 1 ? 1 : 0)} kg` : ''}</p>` : ''}
         ${x.reason ? `<p class="small muted" style="margin-top:4px">${esc(x.reason)}</p>` : x.verdict === 'tieni' ? `<p class="small muted" style="margin-top:4px">Va bene per il tuo obiettivo${x.entry?.mus ? ` (${esc(x.entry.mus)})` : ''}.</p>` : ''}
         ${x.alt ? `<p class="small" style="margin-top:6px">→ Al suo posto: ${ex(x.alt.id, x.alt.name)}</p>` : ''}
       </div>`).join('')}
     </div>
     ${r.add.length ? `<h3 style="margin-top:18px">Da aggiungere</h3>
-      <div class="gym-list">${r.add.map((a) => `<div class="gym-item v-add"><div class="row between"><b>${ex(a.id, a.name)}</b><span class="chip volt">Aggiungi</span></div><p class="small muted" style="margin-top:4px">${esc(a.reason)}</p></div>`).join('')}</div>` : ''}
+      <div class="gym-list">${r.add.map((a) => `<div class="gym-item v-add"><div class="row between"><b>${ex(a.id, a.name)}</b><span class="chip ok">Aggiungi</span></div><p class="small muted" style="margin-top:4px">${esc(a.reason)}</p></div>`).join('')}</div>` : ''}
     ${r.notes.length ? `<div class="stack" style="margin-top:14px">${r.notes.map((n) => `<div class="alert info"><span>ℹ︎</span><span>${esc(n)}</span></div>`).join('')}</div>` : ''}
     <p class="small muted" style="margin-top:14px">Gli esercizi da tenere entrano nelle tue sessioni in palestra con l’etichetta “Dalla tua scheda”; quelli da cambiare vengono sostituiti dall’alternativa.</p>`;
 }
@@ -1073,18 +1017,14 @@ function gymAnalysisHTML(text) {
 function viewGym() {
   const text = state.profile.schedaPalestra || '';
   return `
-  <div class="wizard-top ${R(0)}">
-    <button class="icon-btn" onclick="history.back()" aria-label="Indietro">${ICON.prev}</button>
-    <div class="grow"></div><span class="chip cyan"><i></i>La tua scheda</span>
-  </div>
+  ${subHdr('Cosa fai in palestra?', '#/allenamento')}
   <section class="stack-lg">
-    <div class="${R(1)}"><h1>Cosa fai in palestra?</h1>
-      <p class="muted" style="margin-top:8px">Tocca gli esercizi e i macchinari che usi di solito. Li confronto con il tuo obiettivo, la tua salute e i tuoi test: ti dico cosa tenere, cosa cambiare, cosa togliere e cosa manca.</p></div>
+    ${coach('Tocca gli esercizi e i macchinari che usi di solito. Li confronto con il tuo obiettivo, la tua salute e i tuoi test.', R(1))}
     <div class="search ${R(2)}">${ICON.search}<input type="text" id="gym-q" placeholder="Cerca esercizio o macchinario" autocomplete="off"></div>
     <div id="gym-picker" class="${R(2)}">${gymPickerHTML(text)}</div>
     <div class="${R(3)}">
-      <div class="row between"><b>La tua lista</b><span class="mono small muted" id="gym-count">${gymLines(text).length} esercizi</span></div>
-      <p class="small muted" style="margin-top:4px">Facoltativo: aggiungi serie e carichi (es. “Panca piana 4x8 60 kg”) o esercizi che non trovi nell’elenco.</p>
+      <div class="row between"><b>La tua lista</b><span class="small muted" id="gym-count">${gymLines(text).length} esercizi</span></div>
+      <p class="small muted">Se vuoi, aggiungi serie e carichi (es. “Panca piana 4x8 60 kg”) o esercizi che non trovi nell’elenco.</p>
       <div class="story-box" style="margin-top:8px"><textarea id="gym-text" placeholder="${esc(GYM_PLACEHOLDER)}">${esc(text)}</textarea></div>
     </div>
     <section class="card ${R(3)}" id="gym-out">${gymAnalysisHTML(text)}</section>
@@ -1100,66 +1040,67 @@ function gymPickerHTML(text, q = '') {
   return groups.map((g) => {
     const n = g.items.filter((it) => lines.some((l) => lineIsPick(l, it.name))).length;
     return `<details class="pick-group" data-g="${g.id}" ${qq || n || g.id === 'gambe' ? 'open' : ''}>
-      <summary><span>${g.icon} ${g.label}</span>${n ? `<span class="chip volt">${n}</span>` : ''}</summary>
+      <summary><span>${g.icon} ${g.label}</span>${n ? `<span class="chip ok">${n}</span>` : ''}</summary>
       <div class="pick-grid">${g.items.map((it) => `<button type="button" data-action="gym-pick" data-name="${esc(it.name)}" class="${lines.some((l) => lineIsPick(l, it.name)) ? 'on' : ''}" aria-pressed="${lines.some((l) => lineIsPick(l, it.name))}"><span>${lines.some((l) => lineIsPick(l, it.name)) ? '✓ ' : ''}${esc(it.name)}</span>${it.machine ? '<small>macchina</small>' : ''}</button>`).join('')}</div>
     </details>`;
   }).join('');
 }
-function gymRefresh(text, picker = true) {
+function gymRefresh(text) {
   state.profile.schedaPalestra = text; save();
   document.getElementById('gym-out').innerHTML = gymAnalysisHTML(text);
   document.getElementById('gym-count').textContent = `${gymLines(text).length} esercizi`;
-  if (picker) {
-    const box = document.getElementById('gym-picker');
-    const open = new Set([...box.querySelectorAll('details[open]')].map((d) => d.dataset.g));
-    box.innerHTML = gymPickerHTML(text, document.getElementById('gym-q').value);
-    box.querySelectorAll('details').forEach((d) => { if (open.has(d.dataset.g)) d.open = true; });
-  }
+  gymPickerRedraw(text);
+}
+function gymPickerRedraw(text) {
+  const box = document.getElementById('gym-picker');
+  const open = new Set([...box.querySelectorAll('details[open]')].map((d) => d.dataset.g));
+  box.innerHTML = gymPickerHTML(text, document.getElementById('gym-q')?.value || '');
+  box.querySelectorAll('details').forEach((d) => { if (open.has(d.dataset.g)) d.open = true; });
 }
 function toggleGymPick(name) {
-  const el = document.getElementById('gym-text');
-  const lines = gymLines(el.value);
-  const has = lines.some((l) => lineIsPick(l, name));
-  el.value = (has ? lines.filter((l) => !lineIsPick(l, name)) : [...lines, name]).join('\n');
+  const toggle = (text) => {
+    const lines = gymLines(text);
+    return (lines.some((l) => lineIsPick(l, name)) ? lines.filter((l) => !lineIsPick(l, name)) : [...lines, name]).join('\n');
+  };
   haptic(8);
+  // nel percorso guidato la lista vive nella bozza; nella pagina dedicata nel profilo
+  if (draft && $app.dataset.page === 'inizio') { draft.schedaPalestra = toggle(draft.schedaPalestra || ''); gymPickerRedraw(draft.schedaPalestra); return; }
+  const el = document.getElementById('gym-text');
+  el.value = toggle(el.value);
   gymRefresh(el.value);
 }
 let gymTimer = null;
 function bindGym() {
   const el = document.getElementById('gym-text');
-  el.addEventListener('input', () => {
-    clearTimeout(gymTimer);
-    gymTimer = setTimeout(() => gymRefresh(el.value), 300);
-  });
+  el.addEventListener('input', () => { clearTimeout(gymTimer); gymTimer = setTimeout(() => gymRefresh(el.value), 300); });
   const q = document.getElementById('gym-q');
   q.addEventListener('input', () => { document.getElementById('gym-picker').innerHTML = gymPickerHTML(el.value, q.value); });
 }
-// riquadro di richiamo (Oggi, Piano)
-function gymCard(cls = '') {
+function gymCard() {
   if (!hasGym()) return '';
   const r = gymReview();
-  if (!r) return `<a class="card glow gym-cta ${cls}" href="#/palestra"><span class="ti">🏋️</span><div><b>Che esercizi fai in palestra?</b><p class="small muted" style="margin-top:2px">Scrivili e ti dico quali tenere, cambiare o aggiungere.</p></div></a>`;
+  if (!r) return `<a class="card step-card" href="#/palestra"><span class="step-ico">🏋️</span><div><b>Cosa fai di solito in palestra?</b><p class="small muted">Tocca i tuoi esercizi: ti dico quali tenere, cambiare o aggiungere.</p></div>${ICON.next}</a>`;
   const change = r.items.filter((x) => ['cambia', 'togli', 'riduci'].includes(x.verdict)).length;
-  return `<a class="card gym-cta ${cls}" href="#/palestra"><span class="ti">🏋️</span><div><b>La tua scheda di palestra</b><p class="small muted" style="margin-top:2px">${r.keep.length} esercizi nel piano${change ? ` · ${change} da rivedere` : ''}${r.add.length ? ` · ${r.add.length} da aggiungere` : ''} · copertura ${r.coverage}%</p></div></a>`;
+  return `<a class="card step-card" href="#/palestra"><span class="step-ico">🏋️</span><div><b>La tua scheda di palestra</b><p class="small muted">${r.keep.length} esercizi nel piano${change ? ` · ${change} da rivedere` : ''}${r.add.length ? ` · ${r.add.length} da aggiungere` : ''}</p></div>${ICON.next}</a>`;
 }
 
 // ==================================================================
-// Libreria esercizi
+// Tutti gli esercizi
 // ==================================================================
 
-const LIB_FILTERS = [['tutti', 'Tutti'], ['perte', 'Adatti a te'], ['strength', 'Forza'], ['cardio', 'Cardio'], ['mobility', 'Mobilità'], ['warmup', 'Riscaldamento'], ['balance', 'Equilibrio']];
+const LIB_FILTERS = [['perte', 'Adatti a te'], ['tutti', 'Tutti'], ['strength', 'Forza'], ['cardio', 'Cardio'], ['mobility', 'Mobilità'], ['warmup', 'Riscaldamento']];
 const CAT_LABEL = { warmup: 'Riscaldamento', strength: 'Forza', cardio: 'Cardio', mobility: 'Mobilità', balance: 'Equilibrio' };
 
 function viewLibrary() {
-  const ok = new Set(allowedExercises(state.profile).map((e) => e.id));
+  const ok = new Set(allowedExercises(state.profile, planCtx()).map((e) => e.id));
   return `
-  <header class="hdr ${R(0)}"><div><p class="kicker">${EXERCISES.length} esercizi · ${ok.size} adatti a te</p><h1>Libreria 3D</h1></div></header>
-  <div class="search ${R(1)}" style="margin-top:16px">${ICON.search}<input type="text" id="lib-q" placeholder="Cerca esercizio o muscolo" value="${esc(libQuery)}" autocomplete="off"></div>
-  <div class="filters seg ${R(2)}">${LIB_FILTERS.map(([id, l]) => `<button data-action="lib-filter" data-f="${id}" class="${libFilter === id ? 'on' : ''}">${l}</button>`).join('')}</div>
+  ${subHdr('Tutti gli esercizi', '#/allenamento', `${EXERCISES.length} esercizi · ${ok.size} adatti a te`)}
+  <div class="search ${R(1)}">${ICON.search}<input type="text" id="lib-q" placeholder="Cerca esercizio o muscolo" value="${esc(libQuery)}" autocomplete="off"></div>
+  <div class="filters ${R(2)}">${LIB_FILTERS.map(([id, l]) => `<button data-action="lib-filter" data-f="${id}" class="${libFilter === id ? 'on' : ''}">${l}</button>`).join('')}</div>
   <div class="lib-grid" id="lib-grid">${libCards(ok)}</div>`;
 }
 
-function libCards(ok = new Set(allowedExercises(state.profile).map((e) => e.id))) {
+function libCards(ok = new Set(allowedExercises(state.profile, planCtx()).map((e) => e.id))) {
   const q = libQuery.trim().toLowerCase();
   const list = EXERCISES.filter((e) => {
     if (libFilter === 'perte' && !ok.has(e.id)) return false;
@@ -1169,14 +1110,14 @@ function libCards(ok = new Set(allowedExercises(state.profile).map((e) => e.id))
     return e.n.toLowerCase().includes(q) || g?.mm.some((m) => MUSCLE_LABELS[m].toLowerCase().includes(q));
   });
   if (!list.length) return '<p class="muted">Nessun esercizio trovato.</p>';
-  return list.map((e, i) => {
+  return list.map((e) => {
     const g = guideFor(e.id);
     const yes = ok.has(e.id);
-    return `<button class="lib-card ${yes ? '' : 'locked'} ${i < 12 ? R(i) : ''}" data-action="open-ex" data-id="${e.id}">
-      <span class="play">${ICON.play}</span>
-      <span class="cat">${CAT_LABEL[e.cat]}${yes ? '' : ' · non nel tuo piano'}</span>
+    const d = demoFor(e.id);
+    return `<button class="lib-card ${yes ? '' : 'locked'}" data-action="open-ex" data-id="${e.id}">
+      <span class="lib-pic">${d ? `<img src="${d.b}" alt="" loading="lazy" decoding="async">` : '<span>🎬</span>'}</span>
       <b>${esc(e.n)}</b>
-      <span class="mus">${g ? g.mm.slice(0, 3).map((m) => MUSCLE_LABELS[m]).join(' · ') : ''}</span>
+      <span class="small muted">${g ? g.mm.slice(0, 2).map((m) => MUSCLE_LABELS[m]).join(' · ') : CAT_LABEL[e.cat]}${yes ? '' : ' · non adatto a te ora'}</span>
     </button>`;
   }).join('');
 }
@@ -1194,38 +1135,38 @@ function viewProgress() {
   const last = weights[weights.length - 1];
   const diff = last ? last.kg - p.peso : 0;
   const sugg = suggestions(an);
-
   return `
-  <header class="hdr ${R(0)}"><div><p class="kicker">Dal ${formatDate(state.planStart)}</p><h1>Progressi</h1></div></header>
-  <div class="stats ${R(1)}" style="margin-top:16px">
+  ${hdr('I tuoi progressi', `Dal ${formatDate(state.planStart)}`)}
+  <div class="stats ${R(1)}">
     <div class="stat"><b data-count="${totalDone}">${totalDone}</b><span>allenamenti</span></div>
     <div class="stat"><b data-count="${an.streak}">${an.streak}</b><span>di fila</span></div>
-    <div class="stat"><b>${an.adherence ?? '–'}${an.adherence !== null ? '<small style="font-size:14px">%</small>' : ''}</b><span>costanza</span></div>
+    <div class="stat"><b>${an.adherence ?? '–'}${an.adherence !== null ? '<small>%</small>' : ''}</b><span>costanza</span></div>
   </div>
 
-  ${sugg.length ? `<div class="section-title"><h2>Il coach dice</h2><span class="chip cyan live"><i></i>Analisi</span></div><div class="stack">${sugg.map((s, i) => `
-    <div class="alert ${s.ok ? 'ok' : 'info'} ${R(i + 2)}" style="flex-direction:column;gap:10px">
-      <span>${esc(s.text)}</span>
-      ${s.action ? `<button class="btn ghost small" style="align-self:flex-start" data-action="apply" data-i="${i}">${esc(s.action.label)}</button>` : ''}
-    </div>`).join('')}</div>` : ''}
+  <div class="stack" style="margin-top:14px">
+    ${sugg.length ? sugg.map((s, i) => `
+      <div class="coach-card ${R(i + 2)}">${coach(esc(s.text))}
+        ${s.action ? `<button class="btn soft small" data-action="apply" data-i="${i}">${esc(s.action.label)}</button>` : ''}
+      </div>`).join('') : coach(totalDone ? 'Stai andando bene. Continua così: tra qualche settimana rifacciamo i test e vediamo i numeri.' : 'Qui vedrai i tuoi progressi. Il primo allenamento è il più importante: fallo oggi.', R(2))}
+  </div>
 
-  ${kpiSection(getPlan(), true)}
-  <div class="section-title"><h2>Valutazioni</h2><a class="link small" href="#/partenza">Dettagli →</a></div>
-  <section class="card">
-    ${state.assess.length ? state.assess.map((a, i) => `<div class="list-row"><span>${i ? 'Controllo' : 'Valutazione iniziale'} · ${formatDate(a.date)}</span><span>${Object.keys(a.results || {}).filter((k) => !k.endsWith('Var')).length} test</span></div>`).join('') : '<p class="muted small">Nessuna valutazione ancora.</p>'}
-    <a class="btn ghost wide" style="margin-top:12px" href="#/valutazione">${state.assess.length ? 'Fai il test di controllo' : 'Fai la valutazione iniziale'}</a>
-  </section>
+  ${kpiSection(plan, true)}
 
-  <div class="section-title"><h2>Peso</h2>${last ? `<span class="mono small muted">${fmt(last.kg, 1)} KG · ${diff > 0 ? '+' : ''}${fmt(diff, 1)}</span>` : ''}</div>
+  <div class="section-title"><h2>Peso</h2>${last ? `<span class="small muted">${fmt(last.kg, 1)} kg · ${diff > 0 ? '+' : ''}${fmt(diff, 1)}</span>` : ''}</div>
   <section class="card ${R(3)}">
     ${weightChart(weights, plan)}
     <form class="row" style="margin-top:14px" data-form="weight">
       <input type="number" name="kg" step="0.1" min="30" max="300" inputmode="decimal" placeholder="Peso di oggi (kg)" required>
-      <button class="btn ghost">Aggiungi</button>
+      <button class="btn soft">Aggiungi</button>
     </form>
   </section>
 
-  <div class="section-title"><h2>Storico</h2></div>
+  <div class="stack" style="margin-top:20px">
+    <a class="card step-card" href="#/partenza"><span class="step-ico">📏</span><div><b>Il tuo punto di partenza</b><p class="small muted">${state.assess.length ? `${state.assess.length} ${state.assess.length === 1 ? 'valutazione' : 'valutazioni'} · test, composizione corporea, livelli` : 'Non hai ancora fatto i test.'}</p></div>${ICON.next}</a>
+    <a class="card step-card" href="#/valutazione"><span class="step-ico">⏱️</span><div><b>${state.assess.length ? 'Rifai i test' : 'Fai i test iniziali'}</b><p class="small muted">10 minuti guidati, a casa, senza attrezzi.</p></div>${ICON.next}</a>
+  </div>
+
+  <div class="section-title"><h2>Gli ultimi allenamenti</h2></div>
   <section class="card ${R(4)}">${historyList(plan)}</section>`;
 }
 
@@ -1272,7 +1213,7 @@ function weightChart(weights, plan) {
     <path class="line" d="${path}"/>
     ${weights.map((w) => `<circle class="dot" cx="${x(w.date)}" cy="${y(w.kg)}" r="3.5"><title>${formatDate(w.date)}: ${fmt(w.kg, 1)} kg</title></circle>`).join('')}
   </svg>
-  <div class="legend"><span><i style="background:var(--volt)"></i>Peso</span>${pPath ? '<span><i style="background:var(--cyan)"></i>Previsto</span>' : ''}${n.target && n.rate ? '<span><i style="background:var(--violet)"></i>Obiettivo</span>' : ''}</div>`;
+  <div class="legend"><span><i style="background:var(--accent)"></i>Peso</span>${pPath ? '<span><i style="background:var(--ink-3)"></i>Previsto</span>' : ''}${n.target && n.rate ? '<span><i style="background:var(--ok)"></i>Obiettivo</span>' : ''}</div>`;
 }
 
 function historyList(plan) {
@@ -1298,61 +1239,50 @@ function viewProfile() {
   const goal = GOALS.find((g) => g.id === p.obiettivo);
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
-  const rows = [
-    ['Nome', esc(p.nome) || '–'],
-    ['Età', `${p.eta} anni`],
-    ['Altezza · peso iniziale', `${p.altezza} cm · ${fmt(p.peso, 1)} kg`],
-    ['Obiettivo', `${goal.icon} ${goal.label}${p.pesoObiettivo ? ` · ${p.pesoObiettivo} kg` : ''}`],
-    ['Tempo', `${p.minuti} min × ${p.giorni} giorni`],
-    ['Attrezzi', ['Corpo libero', ...(p.attrezzi || []).map((a) => EQUIPMENT.find((e) => e.id === a)?.label)].join(', ')],
-    ['Salute', p.condizioni?.length ? p.condizioni.map((c) => CONDITIONS.find((x) => x.id === c)?.label).join(', ') : 'Nessuna condizione indicata'],
+  const sogni = SOGNI.filter((s) => (p.sogni || []).includes(s.id)).map((s) => s.label);
+  const sez = [
+    ['base', '👤', 'Chi sei', `${p.eta} anni · ${p.altezza} cm · ${fmt(latestWeight(), 1)} kg`],
+    ['sogni', '🎯', 'Obiettivo', `${sogni.length ? sogni.join(', ') : goal.label}${(p.zone || []).length ? ` · zone: ${p.zone.map((z) => ZONE_LABEL[z].toLowerCase()).join(', ')}` : ''}`],
+    ['vita', '📏', 'Il tuo corpo', p.misure?.vita ? `Girovita ${p.misure.vita} cm` : 'Girovita non ancora misurato'],
+    ['condizioni', '🩺', 'Salute e dolori', p.condizioni?.length ? p.condizioni.map((c) => CONDITIONS.find((x) => x.id === c)?.label).join(', ') : 'Nessuna condizione indicata'],
+    ['giornata', '🌙', 'La tua vita', `${{ sedentario: 'Lavoro da seduto', in_piedi: 'Lavoro in piedi', fisico: 'Lavoro fisico' }[p.lavoro] || ''} · ${p.sonno} ore di sonno`],
+    ['tempo', '🗓️', 'Il tuo tempo', `${p.giorni} allenamenti a settimana · attrezzi: ${['corpo libero', ...(p.attrezzi || []).map((a) => EQUIPMENT.find((e) => e.id === a)?.label.toLowerCase())].join(', ')}`],
+    ['dieta', '🥗', 'A tavola', `${DIET_LABEL[p.dieta] || 'Onnivora'}${p.pasti ? ` · ${p.pasti} pasti` : ''}`],
   ];
   return `
-  <header class="hdr ${R(0)}"><div><p class="kicker">Impostazioni</p><h1>Profilo</h1></div></header>
-  <section class="card ${R(1)}" style="margin-top:16px">${rows.map(([k, v]) => `<div class="list-row"><span>${k}</span><span>${v}</span></div>`).join('')}
-    <button class="btn primary wide" style="margin-top:14px" data-action="edit-profile">Modifica profilo e obiettivi</button>
+  ${subHdr(p.nome ? esc(p.nome) : 'Il tuo profilo', '#/oggi', 'Profilo e impostazioni')}
+  <section class="card ${R(1)}">
+    ${sez.map(([step, ic, t, v]) => `<a class="set-row" href="#/inizio" data-action="edit-section" data-step="${step}"><span class="ti">${ic}</span><span class="grow"><b>${t}</b><span class="small muted">${esc(v)}</span></span>${ICON.next}</a>`).join('')}
+  </section>
+  <p class="small muted" style="margin:10px 4px 0">Tocca una voce per cambiarla: il piano si aggiorna da solo.</p>
+
+  <div class="section-title"><h2>Raccontati a parole tue</h2></div>
+  <section class="card">
+    ${p.relazione ? `<p class="small muted story-quote">“${esc(p.relazione.length > 220 ? p.relazione.slice(0, 220) + '…' : p.relazione)}”</p>` : '<p class="small muted">Se preferisci scrivere invece di rispondere alle domande, posso leggere il tuo racconto.</p>'}
+    <a class="btn soft wide" style="margin-top:12px" href="#/racconto">${p.relazione ? 'Aggiorna il racconto' : 'Scrivi il tuo racconto'}</a>
+    ${aiKey() ? '<p class="small muted" style="margin-top:10px">Analisi con Claude attiva. <button class="link small" data-action="ai-remove">Rimuovi la chiave</button></p>' : ''}
   </section>
 
   ${!standalone ? `
   <div class="section-title"><h2>Installa l’app</h2></div>
-  <section class="card ${R(2)}">
-    ${installEvt ? '<p class="muted small">Aggiungi Ritmo alla schermata Home: funziona anche offline.</p><button class="btn ghost wide" style="margin-top:12px" data-action="install">Installa</button>'
+  <section class="card">
+    ${installEvt ? '<p class="muted small">Aggiungi Ritmo alla schermata Home: funziona anche senza connessione.</p><button class="btn soft wide" style="margin-top:12px" data-action="install">Installa</button>'
       : isIOS ? '<p class="muted small">Su iPhone: tocca <b>Condividi</b> in Safari e poi <b>Aggiungi alla schermata Home</b>.</p>'
         : '<p class="muted small">Dal menu del browser scegli <b>Installa app</b> o <b>Aggiungi a schermata Home</b>.</p>'}
   </section>` : ''}
 
-  <div class="section-title"><h2>La tua relazione</h2></div>
-  <section class="card">
-    ${p.relazione ? `<p class="small muted story-quote">“${esc(p.relazione.length > 280 ? p.relazione.slice(0, 280) + '…' : p.relazione)}”</p>` : '<p class="small muted">Racconta la tua situazione con parole tue: il piano verrà ricalcolato.</p>'}
-    <a class="btn ghost wide" style="margin-top:12px" href="#/racconto">${p.relazione ? 'Aggiorna la relazione' : 'Scrivi la tua relazione'}</a>
-    <div class="row between" style="margin-top:16px"><b class="small">Analisi avanzata con Claude</b>${aiKey() ? '<button class="link small" data-action="ai-remove">Rimuovi chiave</button>' : '<span class="small muted">non attiva</span>'}</div>
-    ${aiKey() ? '' : '<div class="row" style="margin-top:8px"><input type="password" id="ai-key" placeholder="Chiave API sk-ant-…" autocomplete="off"><button class="btn ghost small" data-action="ai-save">Salva</button></div>'}
-    <p class="small muted" style="margin-top:6px">La chiave resta su questo dispositivo e non finisce nei backup. L’analisi usa il tuo account Anthropic.</p>
-  </section>
-
-  ${hasGym() ? `<div class="section-title"><h2>La tua scheda di palestra</h2></div>${gymCard()}` : ''}
-
   <div class="section-title"><h2>I tuoi dati</h2></div>
-  <section class="card stack ${R(3)}">
-    <p class="small muted">Tutto è salvato solo su questo dispositivo. Esporta un backup per non perderlo o per spostarlo su un altro telefono.</p>
+  <section class="card stack">
+    <p class="small muted">Tutto è salvato solo su questo telefono. Esporta una copia per non perderla o per cambiare telefono.</p>
     <div class="grid-2">
-      <button class="btn ghost" data-action="export">Esporta</button>
-      <label class="btn ghost" style="cursor:pointer">Importa<input type="file" accept="application/json" data-action="import" hidden></label>
+      <button class="btn soft" data-action="export">Esporta</button>
+      <label class="btn soft" style="cursor:pointer">Importa<input type="file" accept="application/json" data-action="import" hidden></label>
     </div>
-    <a class="btn ghost wide" href="#/valutazione">Rifai la valutazione</a>
-    ${Object.keys(state.swaps).length || state.excluded.length || Object.keys(state.exAdj).length ? `<button class="btn line wide" data-action="reset-choices">Ripristina esercizi sostituiti ed esclusi (${Object.keys(state.swaps).length + state.excluded.length})</button>` : ''}
+    ${Object.keys(state.swaps).length || state.excluded.length || Object.keys(state.exAdj).length ? `<button class="btn line wide" data-action="reset-choices">Ripristina gli esercizi sostituiti ed esclusi (${Object.keys(state.swaps).length + state.excluded.length})</button>` : ''}
     <button class="btn line wide" data-action="restart-plan">Ricomincia il piano da oggi</button>
     <button class="btn danger wide" data-action="reset">Cancella tutti i dati</button>
   </section>
-
-  <div class="section-title"><h2>Come funziona</h2></div>
-  <section class="card small ${R(4)}">
-    <div class="tip"><span class="ti">🔢</span><p><b>Calorie</b>: metabolismo basale con la formula di Mifflin-St Jeor per il livello di attività. Deficit massimo ~0,5–0,75% del peso a settimana, mai sotto il metabolismo basale.</p></div>
-    <div class="tip"><span class="ti">🏋️</span><p><b>Allenamenti</b>: schemi motori fondamentali scelti tra gli esercizi compatibili con attrezzi, livello e salute. Cicli di 4 settimane con scarico.</p></div>
-    <div class="tip"><span class="ti">🧊</span><p><b>3D</b>: ogni esercizio è animato su un manichino con i muscoli principali evidenziati. Trascina per ruotarlo.</p></div>
-    <div class="tip"><span class="ti">🔁</span><p><b>Adattamento</b>: pesate e sensazioni dopo ogni allenamento correggono calorie, giorni o livello.</p></div>
-  </section>
-  <p class="disclaimer">Ritmo non è un dispositivo medico e non sostituisce il parere di un professionista.</p>`;
+  <p class="disclaimer">Ritmo non è un dispositivo medico e non sostituisce il parere di un professionista.<br>Foto degli esercizi: free-exercise-db, pubblico dominio.</p>`;
 }
 
 // ==================================================================
@@ -1411,7 +1341,7 @@ function startPlayer(iso) {
 
 document.addEventListener('click', (e) => {
   if (location.hash === '#/valutazione' && handleAssessmentClick(e, rerender)) return;
-  const t = e.target.closest('[data-action], .seg button, .chips[data-multi] button, .goal-grid button');
+  const t = e.target.closest('[data-action], .seg button, .opts button, .chips[data-multi] button, .picks[data-multi] button');
   if (!t || t.closest('#player') || t.closest('.sheet')) return;
 
   const slotSeg = t.parentElement?.closest('.seg[data-slot]');
@@ -1422,75 +1352,85 @@ document.addEventListener('click', (e) => {
     updateWeekTotal(); haptic(8);
     return;
   }
-  const segEl = t.parentElement?.closest('.seg[data-name], .goal-grid[data-name]');
+  const segEl = t.closest('button')?.parentElement?.closest('.seg[data-name], .opts[data-name]');
   if (segEl && draft && !t.dataset.action) {
     const name = segEl.dataset.name;
     if (name.startsWith('dol_')) { draft.dolori = draft.dolori || {}; draft.dolori[name.slice(4)] = Number(t.dataset.value); }
-    else draft[name] = ['sonno', 'giorni'].includes(name) ? Number(t.dataset.value) : t.dataset.value;
+    else draft[name] = ['sonno', 'pasti'].includes(name) ? Number(t.dataset.value) : t.dataset.value;
     segEl.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === t));
-    if (name === 'giorni') updateWeekTotal();
     haptic(8);
+    // una sola domanda a scelta singola: si va avanti da soli
+    if (segEl.classList.contains('opts') && passiPer(draft)[flowIdx]?.auto) setTimeout(flowNext, 260);
     return;
   }
-  const multi = t.parentElement?.closest('.chips[data-multi]');
-  if (multi && draft && !t.dataset.action) {
-    const name = multi.dataset.multi;
-    const set = new Set(draft[name] || []);
-    set.has(t.dataset.value) ? set.delete(t.dataset.value) : set.add(t.dataset.value);
-    draft[name] = [...set];
-    t.classList.toggle('on');
+  const multiEl = t.parentElement?.closest('[data-multi]');
+  if (multiEl && draft && !t.dataset.action) {
+    const name = multiEl.dataset.multi;
+    const max = Number(multiEl.dataset.max) || 99;
+    const list = [...(draft[name] || [])];
+    const i = list.indexOf(t.dataset.value);
+    if (i >= 0) list.splice(i, 1);
+    else if (list.length >= max) { toast(`Al massimo ${max}: togline una per cambiarla`); haptic([10, 30, 10]); return; }
+    else list.push(t.dataset.value);
+    draft[name] = list;
+    t.classList.toggle('on', i < 0);
     haptic(8);
     return;
   }
 
   const a = t.dataset.action;
   switch (a) {
-    case 'start-setup': startWizard(false); break;
+    case 'start-flow': draft = null; startFlow(false); location.hash = '#/inizio'; break;
     case 'start-story': location.hash = '#/racconto'; break;
+    case 'complete-flow': {
+      e.preventDefault();
+      draft = null; startFlow(true);
+      const first = domandeMancanti()[0];
+      flowIdx = Math.max(0, passiPer(draft).findIndex((s) => s.id === first?.id));
+      location.hash = '#/inizio';
+      break;
+    }
+    case 'edit-section': e.preventDefault(); draft = null; startFlow(true, t.dataset.step); if (location.hash === '#/inizio') route(); else location.hash = '#/inizio'; break;
+    case 'flow-next': flowNext(); break;
+    case 'flow-jump': {
+      // dal riepilogo: riapre una domanda che il racconto aveva già coperto
+      draft._skip = (draft._skip || []).filter((id) => id !== t.dataset.step);
+      flowGo(Math.max(0, passiPer(draft).findIndex((x) => x.id === t.dataset.step)));
+      break;
+    }
+    case 'flow-back':
+      if (flowIdx > 0) flowGo(flowIdx - 1);
+      else { draft = null; location.hash = state.profile ? '#/profilo' : '#/benvenuto'; }
+      break;
+    case 'flow-save': {
+      const err = passiPer(draft)[flowIdx].errore(draft, flowHelpers);
+      if (err) { const box = document.getElementById('wiz-error'); box.textContent = err; box.hidden = false; return; }
+      flowEdit = true; finishFlow(); justFinished = false; location.hash = '#/oggi'; toast('Piano aggiornato');
+      break;
+    }
+    case 'why-go': justFinished = false; location.hash = '#/oggi'; break;
     case 'slot-add': draft.sessioni.push({ giorni: 3, minuti: 20, luogo: 'casa' }); rerender(); break;
     case 'slot-del': draft.sessioni.splice(Number(t.dataset.i), 1); rerender(); break;
     case 'story-example': { const el = document.getElementById('story'); el.value = EXAMPLE; storySave(EXAMPLE); updateStoryCoverage(); break; }
     case 'story-mic': toggleDictation(t); break;
     case 'story-analyze': analyzeStory(t); break;
-    case 'story-edit-all': { wizardStep = 0; draft._edit = !!state.profile; location.hash = '#/setup'; break; }
-    case 'story-generate': {
-      const err = reviewError();
-      const box = document.getElementById('wiz-error');
-      if (err) { box.textContent = err; box.hidden = false; box.scrollIntoView({ block: 'center' }); haptic([10, 30, 10]); return; }
-      finishWizard();
-      break;
-    }
     case 'ai-save': {
       const v = document.getElementById('ai-key').value.trim();
       if (!/^sk-ant-/.test(v)) { toast('La chiave deve iniziare con sk-ant-'); return; }
-      aiKey(v); toast('Chiave salvata su questo dispositivo'); rerender();
+      aiKey(v); toast('Chiave salvata su questo telefono'); rerender();
       break;
     }
     case 'ai-remove': aiKey(null); toast('Chiave rimossa'); rerender(); break;
-    case 'edit-profile': startWizard(true); break;
-    case 'wiz-back':
-      if (wizardStep > 0) { wizardStep--; route(); window.scrollTo(0, 0); }
-      else location.hash = state.profile ? '#/profilo' : '#/benvenuto';
-      break;
-    case 'wiz-next': {
-      const err = STEPS[wizardStep].validate(draft);
-      const box = document.getElementById('wiz-error');
-      if (err) { box.textContent = err; box.hidden = false; haptic([10, 30, 10]); return; }
-      if (wizardStep < STEPS.length - 1) {
-        wizardStep++;
-        const go = () => { route(); window.scrollTo(0, 0); };
-        if (document.startViewTransition && !reduced()) document.startViewTransition(go); else go();
-      } else finishWizard();
-      break;
-    }
     case 'pick-day': selectedDay = Number(t.dataset.day); showFeedback = false; rerender(); break;
+    case 'open-menu': menuDay = Number(t.dataset.day); break;
+    case 'menu-day': menuDay = Number(t.dataset.day); rerender(); break;
     case 'gym-pick': toggleGymPick(t.dataset.name); break;
-    case 'gym-done': clearTimeout(gymTimer); { const el = document.getElementById('gym-text'); if (el) { state.profile.schedaPalestra = el.value; save(); } } location.hash = '#/piano'; toast('Piano aggiornato con la tua scheda'); break;
+    case 'gym-done': clearTimeout(gymTimer); { const el = document.getElementById('gym-text'); if (el) { state.profile.schedaPalestra = el.value; save(); } } location.hash = '#/allenamento'; toast('Piano aggiornato con la tua scheda'); break;
     case 'open-ex': {
       const id = t.dataset.id;
       const o = { dose: t.dataset.dose };
       if (t.dataset.swap) {
-        o.alternatives = alternativesFor(id, state.profile, planCtx()).map((e) => ({ id: e.id, name: e.n }));
+        o.alternatives = alternativesFor(id, state.profile, planCtx()).map((x) => ({ id: x.id, name: x.n }));
         o.onSwap = (from, to) => {
           const k = Object.keys(state.swaps).find((x) => state.swaps[x] === from);
           if (k) state.swaps[k] = to; else state.swaps[from] = to;
@@ -1515,7 +1455,8 @@ document.addEventListener('click', (e) => {
       set.has(t.dataset.key) ? set.delete(t.dataset.key) : set.add(t.dataset.key);
       lg.items = [...set];
       haptic(10);
-      save(); rerender();
+      save();
+      t.classList.toggle('on'); t.closest('.ex')?.classList.toggle('done');
       break;
     }
     case 'ask-feedback': showFeedback = true; rerender(); break;
@@ -1528,7 +1469,7 @@ document.addEventListener('click', (e) => {
       lg.habits[t.dataset.key] = !lg.habits[t.dataset.key];
       haptic(10);
       save(); rerender();
-      if (Object.values(lg.habits).filter(Boolean).length === 4 && lg.habits[t.dataset.key]) { burst(innerWidth / 2, innerHeight * 0.7); toast('Tutte le abitudini di oggi completate'); }
+      if (Object.values(lg.habits).filter(Boolean).length === 4 && lg.habits[t.dataset.key]) { burst(innerWidth / 2, innerHeight * 0.7); toast('Tutte le piccole cose di oggi fatte'); }
       break;
     }
     case 'lib-filter': libFilter = t.dataset.f; rerender(); break;
@@ -1556,7 +1497,7 @@ document.addEventListener('click', (e) => {
       break;
     case 'reset':
       if (confirm('Cancellare tutti i dati? L’operazione non si può annullare.')) {
-        state = empty(); save(); selectedDay = null; location.hash = '#/benvenuto'; route();
+        state = empty(); save(); selectedDay = null; draft = null; location.hash = '#/benvenuto'; route();
       }
       break;
     default: break;
@@ -1577,7 +1518,7 @@ document.addEventListener('change', (e) => {
     const data = JSON.parse(txt);
     if (!data.profile || !data.planStart) throw new Error('formato');
     state = { ...empty(), ...data };
-    save(); toast('Backup importato'); location.hash = '#/oggi'; rerender();
+    save(); toast('Copia importata'); location.hash = '#/oggi'; rerender();
   }).catch(() => toast('File non valido'));
 });
 

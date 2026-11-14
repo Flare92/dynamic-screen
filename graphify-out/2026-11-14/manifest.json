@@ -1,0 +1,1502 @@
+{
+  ".github/workflows/pages.yml": {
+    "mtime": 1794099988.4379497,
+    "seen": 1794210925.511389,
+    "ast_hash": "6e797710430a9dd9332d689328eb990b",
+    "semantic_hash": "6e797710430a9dd9332d689328eb990b"
+  },
+  "js/app.js": {
+    "mtime": 1794681007.2308738,
+    "seen": 1794681146.5215003,
+    "ast_hash": "ad1dcf61ed262f5c84cd70e873702066",
+    "semantic_hash": ""
+  },
+  "js/assess-ui.js": {
+    "mtime": 1794661416.6724348,
+    "seen": 1794681146.5215058,
+    "ast_hash": "5015b772d70e58b6af6632e29dd8845b",
+    "semantic_hash": ""
+  },
+  "js/assessment.js": {
+    "mtime": 1794178475.0401576,
+    "seen": 1794210925.5113995,
+    "ast_hash": "b412e9d524a0091045213ca5e4937524",
+    "semantic_hash": "b412e9d524a0091045213ca5e4937524"
+  },
+  "js/diet.js": {
+    "mtime": 1794681104.8547652,
+    "seen": 1794681146.5215173,
+    "ast_hash": "e53440c0150d3da1ff5b8319ed07e20e",
+    "semantic_hash": ""
+  },
+  "js/engine.js": {
+    "mtime": 1794680896.3343122,
+    "seen": 1794681146.5215206,
+    "ast_hash": "5adea7274e9ddd64f087648d3d655a78",
+    "semantic_hash": ""
+  },
+  "js/exercises.js": {
+    "mtime": 1794660798.1410372,
+    "seen": 1794681146.5215228,
+    "ast_hash": "1124c8c051d0e2e864c8c9a6853a093a",
+    "semantic_hash": ""
+  },
+  "js/fx.js": {
+    "mtime": 1794660955.766851,
+    "seen": 1794681146.5215263,
+    "ast_hash": "4aeb6797b9496fb8b6c376414fd2c8c0",
+    "semantic_hash": ""
+  },
+  "js/guide.js": {
+    "mtime": 1794660925.4882693,
+    "seen": 1794681146.5215306,
+    "ast_hash": "136b9868079d16780aae2bcae45aecce",
+    "semantic_hash": ""
+  },
+  "js/narrative.js": {
+    "mtime": 1794219466.994267,
+    "seen": 1794219540.5617733,
+    "ast_hash": "46196ac11b3316b467caab6fc714672c",
+    "semantic_hash": ""
+  },
+  "js/player.js": {
+    "mtime": 1794660955.7666094,
+    "seen": 1794681146.5215414,
+    "ast_hash": "d0c54e87c5d88b2f3c2be2e048808bea",
+    "semantic_hash": ""
+  },
+  "js/sheet.js": {
+    "mtime": 1794660955.7661214,
+    "seen": 1794681146.5215435,
+    "ast_hash": "8868a7d90bf9e8c4ac0dfdecebde1c52",
+    "semantic_hash": ""
+  },
+  "package.json": {
+    "mtime": 1794099852.593007,
+    "seen": 1794210925.511411,
+    "ast_hash": "fdc1c7a41a90c4fa577f7832bf39d224",
+    "semantic_hash": "fdc1c7a41a90c4fa577f7832bf39d224"
+  },
+  "sw.js": {
+    "mtime": 1794680765.8376472,
+    "seen": 1794681146.521548,
+    "ast_hash": "a7afc15c17006fe93037a19c7e269856",
+    "semantic_hash": ""
+  },
+  "tests/assessment.test.js": {
+    "mtime": 1794178315.5316408,
+    "seen": 1794210925.5114124,
+    "ast_hash": "44421ea77d4d2a1cda7175e1ad1dfdea",
+    "semantic_hash": "44421ea77d4d2a1cda7175e1ad1dfdea"
+  },
+  "tests/content.test.js": {
+    "mtime": 1794660925.4892044,
+    "seen": 1794681146.5215528,
+    "ast_hash": "a5e2d0e49d64b846ef74428a9f7d3f1a",
+    "semantic_hash": ""
+  },
+  "tests/engine.test.js": {
+    "mtime": 1794099848.717752,
+    "seen": 1794210925.5114143,
+    "ast_hash": "a715a49a861eaec03ad5a00815e6e915",
+    "semantic_hash": "a715a49a861eaec03ad5a00815e6e915"
+  },
+  "tests/narrative.test.js": {
+    "mtime": 1794661249.9263606,
+    "seen": 1794681146.5215614,
+    "ast_hash": "269e469007612dd5f243bd41aea912b0",
+    "semantic_hash": ""
+  },
+  "tests/player.test.js": {
+    "mtime": 1794147036.306544,
+    "seen": 1794210925.5114157,
+    "ast_hash": "b5dbdf32033c6b8dffada33e409bab6a",
+    "semantic_hash": "b5dbdf32033c6b8dffada33e409bab6a"
+  },
+  "README.md": {
+    "mtime": 1794681142.3961723,
+    "seen": 1794681146.5215673,
+    "ast_hash": "dbab891cb5454c00a35d7efc79fc9bd2",
+    "semantic_hash": ""
+  },
+  "index.html": {
+    "mtime": 1794680765.8324256,
+    "seen": 1794681146.521569,
+    "ast_hash": "769178dd65b0878603616af597fc4dc0",
+    "semantic_hash": ""
+  },
+  "CLAUDE.md": {
+    "mtime": 1794681142.3965104,
+    "seen": 1794681146.5215652,
+    "ast_hash": "ad1d70fecefd8e2715b4414007c46b13",
+    "semantic_hash": ""
+  },
+  "js/gymreview.js": {
+    "mtime": 1794237644.775191,
+    "seen": 1794237712.4982646,
+    "ast_hash": "2a1a957347cb5a4ce36f8b82e08e56e1",
+    "semantic_hash": ""
+  },
+  "tests/gymreview.test.js": {
+    "mtime": 1794237679.75796,
+    "seen": 1794237712.4982915,
+    "ast_hash": "480c513cfc7498c8702b90a808e49929",
+    "semantic_hash": ""
+  },
+  "js/demo.js": {
+    "mtime": 1794660955.7515333,
+    "seen": 1794681146.5215123,
+    "ast_hash": "95fe05457c803d74f3e5ef880a47c172",
+    "semantic_hash": ""
+  },
+  "js/demos.js": {
+    "mtime": 1794660651.1358645,
+    "seen": 1794681146.5215147,
+    "ast_hash": "92848bc2a18689b8747b562d1b463a5a",
+    "semantic_hash": ""
+  },
+  "js/flow.js": {
+    "mtime": 1794681007.2277226,
+    "seen": 1794681146.5215247,
+    "ast_hash": "000b4f66f76ba1157f64b9ef4e6f79f9",
+    "semantic_hash": ""
+  },
+  "js/guide-extra.js": {
+    "mtime": 1794660916.7998192,
+    "seen": 1794681146.5215282,
+    "ast_hash": "c767dbb8a34480865a3e88ad035b5b24",
+    "semantic_hash": ""
+  },
+  "js/indagine.js": {
+    "mtime": 1794661353.8079631,
+    "seen": 1794681146.5215356,
+    "ast_hash": "8091912db7424576ae7b0ac266cfb906",
+    "semantic_hash": ""
+  },
+  "tests/indagine.test.js": {
+    "mtime": 1794681104.8549166,
+    "seen": 1794681146.5215592,
+    "ast_hash": "6d961ffcee054694b7f16406f3ede3d6",
+    "semantic_hash": ""
+  },
+  "media/ex/air_bike_0.webp": {
+    "mtime": 1794650253.3777711,
+    "seen": 1794681146.5215712,
+    "ast_hash": "89d679f9e042b932c1936c62fbe4e1fb",
+    "semantic_hash": ""
+  },
+  "media/ex/air_bike_1.webp": {
+    "mtime": 1794650253.461771,
+    "seen": 1794681146.5215728,
+    "ast_hash": "011bf326b887e3de0278052251ab9e71",
+    "semantic_hash": ""
+  },
+  "media/ex/alternate_heel_touchers_0.webp": {
+    "mtime": 1794650253.5417712,
+    "seen": 1794681146.5215747,
+    "ast_hash": "287f976bfc3ea1c3ec88cb14baace39b",
+    "semantic_hash": ""
+  },
+  "media/ex/alternate_heel_touchers_1.webp": {
+    "mtime": 1794650253.621771,
+    "seen": 1794681146.5215764,
+    "ast_hash": "f7161b15a3e877f316e0c2a2413fb6b4",
+    "semantic_hash": ""
+  },
+  "media/ex/ankle_circles_0.webp": {
+    "mtime": 1794650253.7057712,
+    "seen": 1794681146.5215783,
+    "ast_hash": "6fcec8bab634dba41ca659bfb49836b5",
+    "semantic_hash": ""
+  },
+  "media/ex/ankle_circles_1.webp": {
+    "mtime": 1794650253.789771,
+    "seen": 1794681146.52158,
+    "ast_hash": "5a10ea9045f48014d6a99078ad8ab51e",
+    "semantic_hash": ""
+  },
+  "media/ex/ankle_on_the_knee_0.webp": {
+    "mtime": 1794650253.849771,
+    "seen": 1794681146.5215821,
+    "ast_hash": "74d08ea43fec7c1db0e70edf3f4d0f35",
+    "semantic_hash": ""
+  },
+  "media/ex/ankle_on_the_knee_1.webp": {
+    "mtime": 1794650253.9137712,
+    "seen": 1794681146.5215838,
+    "ast_hash": "fa1fff4429b11a272f590777d6f0616c",
+    "semantic_hash": ""
+  },
+  "media/ex/arm_circles_0.webp": {
+    "mtime": 1794650253.9697711,
+    "seen": 1794681146.5215857,
+    "ast_hash": "894587897e76e1e96c9902fe2df99964",
+    "semantic_hash": ""
+  },
+  "media/ex/arm_circles_1.webp": {
+    "mtime": 1794650254.0257711,
+    "seen": 1794681146.5215876,
+    "ast_hash": "599e4c2bc2cc4441f24af7210bea4291",
+    "semantic_hash": ""
+  },
+  "media/ex/band_assisted_pull_up_0.webp": {
+    "mtime": 1794650254.1097713,
+    "seen": 1794681146.5215895,
+    "ast_hash": "0c2920de3db65ececd6f4526ede9e6c7",
+    "semantic_hash": ""
+  },
+  "media/ex/band_assisted_pull_up_1.webp": {
+    "mtime": 1794650254.1897712,
+    "seen": 1794681146.5215912,
+    "ast_hash": "8a7b6c7b6bd8004f95c37bcc0d919934",
+    "semantic_hash": ""
+  },
+  "media/ex/band_pull_apart_0.webp": {
+    "mtime": 1794650254.253771,
+    "seen": 1794681146.5215933,
+    "ast_hash": "1827ac89d71af8b369485739d513e031",
+    "semantic_hash": ""
+  },
+  "media/ex/band_pull_apart_1.webp": {
+    "mtime": 1794650254.3217711,
+    "seen": 1794681146.5216002,
+    "ast_hash": "8ff6dd006d4e1c524d399d010e56d1cf",
+    "semantic_hash": ""
+  },
+  "media/ex/barbell_bench_press__medium_grip_0.webp": {
+    "mtime": 1794650254.3897712,
+    "seen": 1794681146.5216022,
+    "ast_hash": "3f9c3212f8f946a831f9478c49787360",
+    "semantic_hash": ""
+  },
+  "media/ex/barbell_bench_press__medium_grip_1.webp": {
+    "mtime": 1794650254.453771,
+    "seen": 1794681146.5216038,
+    "ast_hash": "be7c5b6c05aa5db132ff439bd9587178",
+    "semantic_hash": ""
+  },
+  "media/ex/barbell_curl_0.webp": {
+    "mtime": 1794650254.5057712,
+    "seen": 1794681146.5216057,
+    "ast_hash": "59365335dd1ec9766f962c5ce61b715d",
+    "semantic_hash": ""
+  },
+  "media/ex/barbell_curl_1.webp": {
+    "mtime": 1794650254.5537713,
+    "seen": 1794681146.5216074,
+    "ast_hash": "62dff5e1a44a668b81bdf7f82bddf133",
+    "semantic_hash": ""
+  },
+  "media/ex/barbell_deadlift_0.webp": {
+    "mtime": 1794650254.6097713,
+    "seen": 1794681146.5216093,
+    "ast_hash": "0b232d93802b13aa3becba4ddc3b8f10",
+    "semantic_hash": ""
+  },
+  "media/ex/barbell_deadlift_1.webp": {
+    "mtime": 1794650254.6657712,
+    "seen": 1794681146.5216112,
+    "ast_hash": "887f5131ef5198e64a9b28fbe0d822d0",
+    "semantic_hash": ""
+  },
+  "media/ex/barbell_hip_thrust_0.webp": {
+    "mtime": 1794650254.7217712,
+    "seen": 1794681146.5216131,
+    "ast_hash": "cc52b80cef018ab915064415da96f252",
+    "semantic_hash": ""
+  },
+  "media/ex/barbell_hip_thrust_1.webp": {
+    "mtime": 1794650254.7737713,
+    "seen": 1794681146.5216148,
+    "ast_hash": "9a81745d6f53f716d99ae5e880809231",
+    "semantic_hash": ""
+  },
+  "media/ex/barbell_side_split_squat_0.webp": {
+    "mtime": 1794650254.825771,
+    "seen": 1794681146.5216165,
+    "ast_hash": "76045b5337c45d30580fd8ad75198d57",
+    "semantic_hash": ""
+  },
+  "media/ex/barbell_side_split_squat_1.webp": {
+    "mtime": 1794650254.8777711,
+    "seen": 1794681146.5216184,
+    "ast_hash": "ddd74a5655663fe38e6367045754f1c9",
+    "semantic_hash": ""
+  },
+  "media/ex/barbell_squat_0.webp": {
+    "mtime": 1794650254.937771,
+    "seen": 1794681146.5216205,
+    "ast_hash": "b0f4160cf8158ab12501e49090f8219d",
+    "semantic_hash": ""
+  },
+  "media/ex/barbell_squat_1.webp": {
+    "mtime": 1794650254.9977713,
+    "seen": 1794681146.5216222,
+    "ast_hash": "d047bbd5daf6e465f68ddc00bef5cb6d",
+    "semantic_hash": ""
+  },
+  "media/ex/bench_dips_0.webp": {
+    "mtime": 1794650255.0497713,
+    "seen": 1794681146.5216238,
+    "ast_hash": "40b002ee323b3542b9e935779c1a870a",
+    "semantic_hash": ""
+  },
+  "media/ex/bench_dips_1.webp": {
+    "mtime": 1794650255.1057713,
+    "seen": 1794681146.5216255,
+    "ast_hash": "62033e995090803bbd6e03fb2230f693",
+    "semantic_hash": ""
+  },
+  "media/ex/bent_over_barbell_row_0.webp": {
+    "mtime": 1794650255.1617713,
+    "seen": 1794681146.5216274,
+    "ast_hash": "3b1ae14e7f8e2b02bcc7fc9f401584e8",
+    "semantic_hash": ""
+  },
+  "media/ex/bent_over_barbell_row_1.webp": {
+    "mtime": 1794650255.2217712,
+    "seen": 1794681146.521629,
+    "ast_hash": "15374fa9a5c13b0aadc5139abb2c4ac3",
+    "semantic_hash": ""
+  },
+  "media/ex/bent_over_two_dumbbell_row_0.webp": {
+    "mtime": 1794650255.2817712,
+    "seen": 1794681146.5216308,
+    "ast_hash": "9e62bb2b10574b21bb7eca4139869c94",
+    "semantic_hash": ""
+  },
+  "media/ex/bent_over_two_dumbbell_row_1.webp": {
+    "mtime": 1794650255.3417711,
+    "seen": 1794681146.5216322,
+    "ast_hash": "514e1af03791f07d80bfb1eed606f1f0",
+    "semantic_hash": ""
+  },
+  "media/ex/bicycling_stationary_0.webp": {
+    "mtime": 1794650255.3937712,
+    "seen": 1794681146.521634,
+    "ast_hash": "0d7cd680652630af42750c28d9b1c155",
+    "semantic_hash": ""
+  },
+  "media/ex/bicycling_stationary_1.webp": {
+    "mtime": 1794650255.4497712,
+    "seen": 1794681146.5216355,
+    "ast_hash": "1fb1b5977677fb2ec40c37ab7c693b7a",
+    "semantic_hash": ""
+  },
+  "media/ex/bodyweight_squat_0.webp": {
+    "mtime": 1794650255.4897711,
+    "seen": 1794681146.5216374,
+    "ast_hash": "707b920f2e8cea430a796fdf97049898",
+    "semantic_hash": ""
+  },
+  "media/ex/bodyweight_squat_1.webp": {
+    "mtime": 1794650255.5417712,
+    "seen": 1794681146.5216389,
+    "ast_hash": "f57fcb589ca8468e5b7ed440ce0db7ae",
+    "semantic_hash": ""
+  },
+  "media/ex/butterfly_0.webp": {
+    "mtime": 1794650255.6137712,
+    "seen": 1794681146.5216405,
+    "ast_hash": "657bb1be3a0962301666d7e22a19ba9a",
+    "semantic_hash": ""
+  },
+  "media/ex/butterfly_1.webp": {
+    "mtime": 1794650255.6857712,
+    "seen": 1794681146.521642,
+    "ast_hash": "d30d17b4171ccfba49160de20833b8ac",
+    "semantic_hash": ""
+  },
+  "media/ex/cable_crossover_0.webp": {
+    "mtime": 1794650255.7497714,
+    "seen": 1794681146.5216436,
+    "ast_hash": "af89d3aaedc54888fc02098173c6a999",
+    "semantic_hash": ""
+  },
+  "media/ex/cable_crossover_1.webp": {
+    "mtime": 1794650255.8217711,
+    "seen": 1794681146.521645,
+    "ast_hash": "4abd47728eba8477a82dffbbd2ceabf1",
+    "semantic_hash": ""
+  },
+  "media/ex/cable_crunch_0.webp": {
+    "mtime": 1794650255.8817713,
+    "seen": 1794681146.5216472,
+    "ast_hash": "b3b7ea90e79e216f80d985c3e6ef7f17",
+    "semantic_hash": ""
+  },
+  "media/ex/cable_crunch_1.webp": {
+    "mtime": 1794650255.9377713,
+    "seen": 1794681146.521649,
+    "ast_hash": "ba26268f1a6da90e270a10a44a1dfe6f",
+    "semantic_hash": ""
+  },
+  "media/ex/calf_stretch_hands_against_wall_0.webp": {
+    "mtime": 1794650255.9857712,
+    "seen": 1794681146.521651,
+    "ast_hash": "a4ed53a21e1059bac24d1a69ef28bc06",
+    "semantic_hash": ""
+  },
+  "media/ex/calf_stretch_hands_against_wall_1.webp": {
+    "mtime": 1794650256.0297713,
+    "seen": 1794681146.5216525,
+    "ast_hash": "2d4104480115614005c3264fce8c2336",
+    "semantic_hash": ""
+  },
+  "media/ex/cat_stretch_0.webp": {
+    "mtime": 1794650256.0857713,
+    "seen": 1794681146.5216541,
+    "ast_hash": "9016b7c1def062ac1cb74979cd1a103f",
+    "semantic_hash": ""
+  },
+  "media/ex/cat_stretch_1.webp": {
+    "mtime": 1794650256.1337712,
+    "seen": 1794681146.5216558,
+    "ast_hash": "82a5490fd672a65858e15655b87f3fc3",
+    "semantic_hash": ""
+  },
+  "media/ex/childs_pose_0.webp": {
+    "mtime": 1794650256.1817713,
+    "seen": 1794681146.521658,
+    "ast_hash": "7c73ae221a5cd7e0027fd90593482097",
+    "semantic_hash": ""
+  },
+  "media/ex/childs_pose_1.webp": {
+    "mtime": 1794650256.2297714,
+    "seen": 1794681146.5216596,
+    "ast_hash": "bdd503dd85b7535e35bbb17cea1c9f0f",
+    "semantic_hash": ""
+  },
+  "media/ex/close_grip_front_lat_pulldown_0.webp": {
+    "mtime": 1794650256.2857714,
+    "seen": 1794681146.5216615,
+    "ast_hash": "3a66967a9bc069458802b1bc0b5678d6",
+    "semantic_hash": ""
+  },
+  "media/ex/close_grip_front_lat_pulldown_1.webp": {
+    "mtime": 1794650256.3457713,
+    "seen": 1794681146.521663,
+    "ast_hash": "b5e245ba61ba957d13676bea20b19e2b",
+    "semantic_hash": ""
+  },
+  "media/ex/crunches_0.webp": {
+    "mtime": 1794650256.4097712,
+    "seen": 1794681146.5216646,
+    "ast_hash": "ab4135a17c9f5d9273eff100f1d8910d",
+    "semantic_hash": ""
+  },
+  "media/ex/crunches_1.webp": {
+    "mtime": 1794650256.4777713,
+    "seen": 1794681146.5216663,
+    "ast_hash": "150bc87abc3b52a601f4ffc84871e41e",
+    "semantic_hash": ""
+  },
+  "media/ex/dead_bug_0.webp": {
+    "mtime": 1794650256.5217712,
+    "seen": 1794681146.521668,
+    "ast_hash": "0acc26775868c5b2345e7463bdd1f04b",
+    "semantic_hash": ""
+  },
+  "media/ex/dead_bug_1.webp": {
+    "mtime": 1794650256.5777712,
+    "seen": 1794681146.5216696,
+    "ast_hash": "d2575e55f2360e671255ead22c46d454",
+    "semantic_hash": ""
+  },
+  "media/ex/dumbbell_bench_press_0.webp": {
+    "mtime": 1794650256.6497712,
+    "seen": 1794681146.5216715,
+    "ast_hash": "069d2d61e232cb15e84ca131e98be9ab",
+    "semantic_hash": ""
+  },
+  "media/ex/dumbbell_bench_press_1.webp": {
+    "mtime": 1794650256.7017713,
+    "seen": 1794681146.521673,
+    "ast_hash": "672d421ca0163ccb8af539a56a507d57",
+    "semantic_hash": ""
+  },
+  "media/ex/dumbbell_bicep_curl_0.webp": {
+    "mtime": 1794650256.7497714,
+    "seen": 1794681146.5216765,
+    "ast_hash": "43778a9dcac494146bd406ae2f952652",
+    "semantic_hash": ""
+  },
+  "media/ex/dumbbell_bicep_curl_1.webp": {
+    "mtime": 1794650256.8017714,
+    "seen": 1794681146.521678,
+    "ast_hash": "ea4c4d5f206b874e9773c0ec1cba32e6",
+    "semantic_hash": ""
+  },
+  "media/ex/dumbbell_floor_press_0.webp": {
+    "mtime": 1794650256.8577714,
+    "seen": 1794681146.5216796,
+    "ast_hash": "8d603638f4062f3553df8b9c38b705b9",
+    "semantic_hash": ""
+  },
+  "media/ex/dumbbell_floor_press_1.webp": {
+    "mtime": 1794650256.9177713,
+    "seen": 1794681146.5216813,
+    "ast_hash": "ea0de873f5c87cb6c24254a8f684dbb1",
+    "semantic_hash": ""
+  },
+  "media/ex/dumbbell_flyes_0.webp": {
+    "mtime": 1794650256.9737713,
+    "seen": 1794681146.521683,
+    "ast_hash": "40d99813f327d5202a0dc4ef68fc13d0",
+    "semantic_hash": ""
+  },
+  "media/ex/dumbbell_flyes_1.webp": {
+    "mtime": 1794650257.0257714,
+    "seen": 1794681146.521685,
+    "ast_hash": "28da946946689b548e64e5d9cb011cfb",
+    "semantic_hash": ""
+  },
+  "media/ex/dumbbell_lunges_0.webp": {
+    "mtime": 1794650257.0817714,
+    "seen": 1794681146.5216868,
+    "ast_hash": "8eadbb4343185bad668d5362539d019e",
+    "semantic_hash": ""
+  },
+  "media/ex/dumbbell_lunges_1.webp": {
+    "mtime": 1794650257.1377714,
+    "seen": 1794681146.5216885,
+    "ast_hash": "b3e000bf581f51986f210baf3fa8d346",
+    "semantic_hash": ""
+  },
+  "media/ex/dumbbell_rear_lunge_0.webp": {
+    "mtime": 1794650257.1817713,
+    "seen": 1794681146.5216901,
+    "ast_hash": "d1156f8c27aa7077b45e9b8e8b576c89",
+    "semantic_hash": ""
+  },
+  "media/ex/dumbbell_rear_lunge_1.webp": {
+    "mtime": 1794650257.2337713,
+    "seen": 1794681146.5216918,
+    "ast_hash": "493bf64a373bf71ac05ac55b31130eee",
+    "semantic_hash": ""
+  },
+  "media/ex/dumbbell_shoulder_press_0.webp": {
+    "mtime": 1794650257.2977712,
+    "seen": 1794681146.5216937,
+    "ast_hash": "d501fc932a4a060fb6147da335b81b66",
+    "semantic_hash": ""
+  },
+  "media/ex/dumbbell_shoulder_press_1.webp": {
+    "mtime": 1794650257.3617713,
+    "seen": 1794681146.5216954,
+    "ast_hash": "f2904fd46eae65eb4b0525fe8cdb8806",
+    "semantic_hash": ""
+  },
+  "media/ex/dumbbell_step_ups_0.webp": {
+    "mtime": 1794650257.4217713,
+    "seen": 1794681146.521697,
+    "ast_hash": "f7c2525ca6436b756b8f3adb93f68962",
+    "semantic_hash": ""
+  },
+  "media/ex/dumbbell_step_ups_1.webp": {
+    "mtime": 1794650257.4817712,
+    "seen": 1794681146.5216985,
+    "ast_hash": "e50bc02cd6f5dc597ceb72fdd85eb9f1",
+    "semantic_hash": ""
+  },
+  "media/ex/elliptical_trainer_0.webp": {
+    "mtime": 1794650257.5617714,
+    "seen": 1794681146.5217004,
+    "ast_hash": "9fdc73dfdd5118acf5c28457f30ab37b",
+    "semantic_hash": ""
+  },
+  "media/ex/elliptical_trainer_1.webp": {
+    "mtime": 1794650257.6377714,
+    "seen": 1794681146.521702,
+    "ast_hash": "d1bd3f60bcb372d8ace1c0f081606f04",
+    "semantic_hash": ""
+  },
+  "media/ex/face_pull_0.webp": {
+    "mtime": 1794650257.6937714,
+    "seen": 1794681146.5217037,
+    "ast_hash": "0ddc46f7c92861371b03c57022590519",
+    "semantic_hash": ""
+  },
+  "media/ex/face_pull_1.webp": {
+    "mtime": 1794650257.7577713,
+    "seen": 1794681146.5217054,
+    "ast_hash": "228352c01885660a6f0d00c9dba533a8",
+    "semantic_hash": ""
+  },
+  "media/ex/farmers_walk_0.webp": {
+    "mtime": 1794650257.8257713,
+    "seen": 1794681146.5217073,
+    "ast_hash": "b782edc46c4bc8682cb8476e5218dec2",
+    "semantic_hash": ""
+  },
+  "media/ex/farmers_walk_1.webp": {
+    "mtime": 1794650257.8897715,
+    "seen": 1794681146.5217087,
+    "ast_hash": "b3835e7dd2c798f91be0535dcbe3f9dc",
+    "semantic_hash": ""
+  },
+  "media/ex/fast_skipping_0.webp": {
+    "mtime": 1794650257.9377713,
+    "seen": 1794681146.5217106,
+    "ast_hash": "67444ebb0be49bfb689946f4f3a7f34d",
+    "semantic_hash": ""
+  },
+  "media/ex/fast_skipping_1.webp": {
+    "mtime": 1794650257.9857714,
+    "seen": 1794681146.521712,
+    "ast_hash": "dd65f247a32e97a07bbbea6623f60d2e",
+    "semantic_hash": ""
+  },
+  "media/ex/front_dumbbell_raise_0.webp": {
+    "mtime": 1794650258.0377715,
+    "seen": 1794681146.5217137,
+    "ast_hash": "834ce1bed5a5e0de976f82b2d2ad4ab8",
+    "semantic_hash": ""
+  },
+  "media/ex/front_dumbbell_raise_1.webp": {
+    "mtime": 1794650258.0897713,
+    "seen": 1794681146.5217156,
+    "ast_hash": "96f0ea87194009fd1e3e570e9e9ea361",
+    "semantic_hash": ""
+  },
+  "media/ex/glute_kickback_0.webp": {
+    "mtime": 1794650258.1497715,
+    "seen": 1794681146.5217173,
+    "ast_hash": "05577093ce4461273355270be5d473da",
+    "semantic_hash": ""
+  },
+  "media/ex/glute_kickback_1.webp": {
+    "mtime": 1794650258.2097714,
+    "seen": 1794681146.521719,
+    "ast_hash": "e8e6c4ce0e20825a87570bb7201d8fca",
+    "semantic_hash": ""
+  },
+  "media/ex/goblet_squat_0.webp": {
+    "mtime": 1794650258.2577715,
+    "seen": 1794681146.5217206,
+    "ast_hash": "69b4c94dc163802f117cc77fcb717917",
+    "semantic_hash": ""
+  },
+  "media/ex/goblet_squat_1.webp": {
+    "mtime": 1794650258.3097713,
+    "seen": 1794681146.5217226,
+    "ast_hash": "74712ad5220af5d048e60bd6a0da1fcb",
+    "semantic_hash": ""
+  },
+  "media/ex/good_morning_0.webp": {
+    "mtime": 1794650258.3737714,
+    "seen": 1794681146.5217247,
+    "ast_hash": "e6a9af9decac8043e14cbc1f7685c92b",
+    "semantic_hash": ""
+  },
+  "media/ex/good_morning_1.webp": {
+    "mtime": 1794650258.4417715,
+    "seen": 1794681146.5217264,
+    "ast_hash": "9e451548b72a4c6c02d1e534debd1894",
+    "semantic_hash": ""
+  },
+  "media/ex/hack_squat_0.webp": {
+    "mtime": 1794650258.5577714,
+    "seen": 1794681146.5217283,
+    "ast_hash": "ffe30e224fc3c62c51f1d8eb6e8091f4",
+    "semantic_hash": ""
+  },
+  "media/ex/hack_squat_1.webp": {
+    "mtime": 1794650258.6457715,
+    "seen": 1794681146.52173,
+    "ast_hash": "2c67134fe96e765bc5a36960a5a10d55",
+    "semantic_hash": ""
+  },
+  "media/ex/hammer_curls_0.webp": {
+    "mtime": 1794650258.6937714,
+    "seen": 1794681146.5217319,
+    "ast_hash": "f7805d09814e1d8ce5c646599d7a244e",
+    "semantic_hash": ""
+  },
+  "media/ex/hammer_curls_1.webp": {
+    "mtime": 1794650258.7497714,
+    "seen": 1794681146.5217335,
+    "ast_hash": "cda668a5d28d295e68ffda8cdbde329d",
+    "semantic_hash": ""
+  },
+  "media/ex/hanging_leg_raise_0.webp": {
+    "mtime": 1794650258.7977715,
+    "seen": 1794681146.5217354,
+    "ast_hash": "2a543db6ccdaded9361f28b795c9cf04",
+    "semantic_hash": ""
+  },
+  "media/ex/hanging_leg_raise_1.webp": {
+    "mtime": 1794650258.8537714,
+    "seen": 1794681146.5217376,
+    "ast_hash": "f5939c2caebf394774fca4e1506c02d9",
+    "semantic_hash": ""
+  },
+  "media/ex/hyperextensions_back_extensions_0.webp": {
+    "mtime": 1794650258.9217715,
+    "seen": 1794681146.5217392,
+    "ast_hash": "5361baddbddfdca4ec7bd59ef698150f",
+    "semantic_hash": ""
+  },
+  "media/ex/hyperextensions_back_extensions_1.webp": {
+    "mtime": 1794650258.9977715,
+    "seen": 1794681146.521741,
+    "ast_hash": "ec4f09a4573768f08bfb1814eb45923f",
+    "semantic_hash": ""
+  },
+  "media/ex/incline_dumbbell_press_0.webp": {
+    "mtime": 1794650259.0617714,
+    "seen": 1794681146.5217426,
+    "ast_hash": "f2c3e3233e541c6e7acf5a054bd7e369",
+    "semantic_hash": ""
+  },
+  "media/ex/incline_dumbbell_press_1.webp": {
+    "mtime": 1794650259.1217713,
+    "seen": 1794681146.5217445,
+    "ast_hash": "eb54f022873a1d29e2c16077a6bc884f",
+    "semantic_hash": ""
+  },
+  "media/ex/incline_push_up_0.webp": {
+    "mtime": 1794650259.1817715,
+    "seen": 1794681146.5217462,
+    "ast_hash": "98b28f93f2cf01676a1f1da7e1490dc2",
+    "semantic_hash": ""
+  },
+  "media/ex/incline_push_up_1.webp": {
+    "mtime": 1794650259.2417715,
+    "seen": 1794681146.521748,
+    "ast_hash": "a72883f64025d5b1668e072b89ce41d7",
+    "semantic_hash": ""
+  },
+  "media/ex/inverted_row_0.webp": {
+    "mtime": 1794650259.3057714,
+    "seen": 1794681146.5217495,
+    "ast_hash": "0eadaee8ea46ad7c162310895f74713c",
+    "semantic_hash": ""
+  },
+  "media/ex/inverted_row_1.webp": {
+    "mtime": 1794650259.3617713,
+    "seen": 1794681146.5217514,
+    "ast_hash": "fcfef17bc77beb8c4b06d9d6b8ecd458",
+    "semantic_hash": ""
+  },
+  "media/ex/kneeling_high_pulley_row_0.webp": {
+    "mtime": 1794650259.4097714,
+    "seen": 1794681146.5217528,
+    "ast_hash": "bd30dfe2b76cc94163df1a2de57c4e6a",
+    "semantic_hash": ""
+  },
+  "media/ex/kneeling_high_pulley_row_1.webp": {
+    "mtime": 1794650259.4577715,
+    "seen": 1794681146.5217547,
+    "ast_hash": "f068defedc6f5193a40f06988fcc469f",
+    "semantic_hash": ""
+  },
+  "media/ex/kneeling_hip_flexor_0.webp": {
+    "mtime": 1794650259.4977715,
+    "seen": 1794681146.5217564,
+    "ast_hash": "652123e0bdff45f6134b15c39c29e583",
+    "semantic_hash": ""
+  },
+  "media/ex/kneeling_hip_flexor_1.webp": {
+    "mtime": 1794650259.5337715,
+    "seen": 1794681146.5217583,
+    "ast_hash": "4a1d9ee4d6f5c37130d9ee0cb14b374d",
+    "semantic_hash": ""
+  },
+  "media/ex/leg_extensions_0.webp": {
+    "mtime": 1794650259.6017714,
+    "seen": 1794681146.5217597,
+    "ast_hash": "ba6e963d3c33f88c0cf03714b7f46820",
+    "semantic_hash": ""
+  },
+  "media/ex/leg_extensions_1.webp": {
+    "mtime": 1794650259.6657715,
+    "seen": 1794681146.5217614,
+    "ast_hash": "dbbb9b9e220caea0257db6e585625f53",
+    "semantic_hash": ""
+  },
+  "media/ex/leg_press_0.webp": {
+    "mtime": 1794650259.7297714,
+    "seen": 1794681146.5217633,
+    "ast_hash": "ecfa3b5f9d7ef151d1279e27ac5d4816",
+    "semantic_hash": ""
+  },
+  "media/ex/leg_press_1.webp": {
+    "mtime": 1794650259.7937715,
+    "seen": 1794681146.5217648,
+    "ast_hash": "2d03656c89726f2d517645a4cf884c8b",
+    "semantic_hash": ""
+  },
+  "media/ex/lower_back_curl_0.webp": {
+    "mtime": 1794650259.8337715,
+    "seen": 1794681146.521767,
+    "ast_hash": "5d12d3ae26f213f303747826715b6753",
+    "semantic_hash": ""
+  },
+  "media/ex/lower_back_curl_1.webp": {
+    "mtime": 1794650259.8737714,
+    "seen": 1794681146.5217683,
+    "ast_hash": "5456cc117f7dea7b033c1af35ab05c04",
+    "semantic_hash": ""
+  },
+  "media/ex/lying_dumbbell_tricep_extension_0.webp": {
+    "mtime": 1794650259.9297714,
+    "seen": 1794681146.5217705,
+    "ast_hash": "7291e2a20c01c568fc270b7bbe8ea410",
+    "semantic_hash": ""
+  },
+  "media/ex/lying_dumbbell_tricep_extension_1.webp": {
+    "mtime": 1794650259.9857714,
+    "seen": 1794681146.5217721,
+    "ast_hash": "10c29acd37ea23ffb6021027faca62be",
+    "semantic_hash": ""
+  },
+  "media/ex/lying_leg_curls_0.webp": {
+    "mtime": 1794650260.0537715,
+    "seen": 1794681146.5217736,
+    "ast_hash": "068256c2dca680249e4bd525d499b1c4",
+    "semantic_hash": ""
+  },
+  "media/ex/lying_leg_curls_1.webp": {
+    "mtime": 1794650260.1297715,
+    "seen": 1794681146.5217752,
+    "ast_hash": "5bbd471f61e9ffb31d40e03707cfd962",
+    "semantic_hash": ""
+  },
+  "media/ex/machine_bench_press_0.webp": {
+    "mtime": 1794650260.1937716,
+    "seen": 1794681146.5217772,
+    "ast_hash": "a7ed99b5cbc9801bdf57b415653fa120",
+    "semantic_hash": ""
+  },
+  "media/ex/machine_bench_press_1.webp": {
+    "mtime": 1794650260.2577715,
+    "seen": 1794681146.5217786,
+    "ast_hash": "80f64fa4e311f9a5e7bba5a7310ee33f",
+    "semantic_hash": ""
+  },
+  "media/ex/machine_shoulder_military_press_0.webp": {
+    "mtime": 1794650260.3257716,
+    "seen": 1794681146.5217805,
+    "ast_hash": "de616d9a9c8620b92ea0b525bc2fd343",
+    "semantic_hash": ""
+  },
+  "media/ex/machine_shoulder_military_press_1.webp": {
+    "mtime": 1794650260.3897715,
+    "seen": 1794681146.5217822,
+    "ast_hash": "9e6e9b5d180b4f50b72591b6fb1c3e6e",
+    "semantic_hash": ""
+  },
+  "media/ex/monster_walk_0.webp": {
+    "mtime": 1794650260.4337716,
+    "seen": 1794681146.5217838,
+    "ast_hash": "5fe88997e65395d509d31ca2ef77ce52",
+    "semantic_hash": ""
+  },
+  "media/ex/monster_walk_1.webp": {
+    "mtime": 1794650260.4777715,
+    "seen": 1794681146.5217855,
+    "ast_hash": "e022db30d067dabce71f77795b926adf",
+    "semantic_hash": ""
+  },
+  "media/ex/mountain_climbers_0.webp": {
+    "mtime": 1794650260.5177715,
+    "seen": 1794681146.5217874,
+    "ast_hash": "4097a257ed260b29ac513a19d48072d9",
+    "semantic_hash": ""
+  },
+  "media/ex/mountain_climbers_1.webp": {
+    "mtime": 1794650260.5577714,
+    "seen": 1794681146.521789,
+    "ast_hash": "045272024ea2c41cb7d537eaafc2fc42",
+    "semantic_hash": ""
+  },
+  "media/ex/one_arm_against_wall_0.webp": {
+    "mtime": 1794650260.8377717,
+    "seen": 1794681146.521791,
+    "ast_hash": "f9cb29caba0cae1bb9398406528ddd67",
+    "semantic_hash": ""
+  },
+  "media/ex/one_arm_against_wall_1.webp": {
+    "mtime": 1794650260.8777716,
+    "seen": 1794681146.5217927,
+    "ast_hash": "f9cb29caba0cae1bb9398406528ddd67",
+    "semantic_hash": ""
+  },
+  "media/ex/one_arm_dumbbell_row_0.webp": {
+    "mtime": 1794650260.6177716,
+    "seen": 1794681146.5217946,
+    "ast_hash": "35c487e1719f5eeb29af013bac66eea8",
+    "semantic_hash": ""
+  },
+  "media/ex/one_arm_dumbbell_row_1.webp": {
+    "mtime": 1794650260.6777716,
+    "seen": 1794681146.5217965,
+    "ast_hash": "b889bdcdc459a9829adf295236e5afb0",
+    "semantic_hash": ""
+  },
+  "media/ex/one_legged_cable_kickback_0.webp": {
+    "mtime": 1794650260.7377715,
+    "seen": 1794681146.5217981,
+    "ast_hash": "467e9ca606a55da7c9c7387f7eaabc88",
+    "semantic_hash": ""
+  },
+  "media/ex/one_legged_cable_kickback_1.webp": {
+    "mtime": 1794650260.7977715,
+    "seen": 1794681146.5218,
+    "ast_hash": "d6dfe3fb0625ea73cf47ec3f00a5c84a",
+    "semantic_hash": ""
+  },
+  "media/ex/pallof_press_0.webp": {
+    "mtime": 1794650260.9177716,
+    "seen": 1794681146.5218015,
+    "ast_hash": "83b0013f1de7a8fd5fc84e959badb309",
+    "semantic_hash": ""
+  },
+  "media/ex/pallof_press_1.webp": {
+    "mtime": 1794650260.9537716,
+    "seen": 1794681146.5218034,
+    "ast_hash": "7e9e0de72b570916ac462ed075f870d3",
+    "semantic_hash": ""
+  },
+  "media/ex/pelvic_tilt_into_bridge_0.webp": {
+    "mtime": 1794650260.9977715,
+    "seen": 1794681146.521805,
+    "ast_hash": "72416a76753cf304520f0409b40dea08",
+    "semantic_hash": ""
+  },
+  "media/ex/pelvic_tilt_into_bridge_1.webp": {
+    "mtime": 1794650261.0377715,
+    "seen": 1794681146.521807,
+    "ast_hash": "2184f25fa3bf5462f240cb4347856460",
+    "semantic_hash": ""
+  },
+  "media/ex/plank_0.webp": {
+    "mtime": 1794650261.0857716,
+    "seen": 1794681146.5218084,
+    "ast_hash": "31317d500cf95307d6169eec02e6a366",
+    "semantic_hash": ""
+  },
+  "media/ex/plank_1.webp": {
+    "mtime": 1794650261.1297715,
+    "seen": 1794681146.5218103,
+    "ast_hash": "259d8c76cd0f7c36e7e20c0c4358dca7",
+    "semantic_hash": ""
+  },
+  "media/ex/plie_dumbbell_squat_0.webp": {
+    "mtime": 1794650261.1777716,
+    "seen": 1794681146.5218117,
+    "ast_hash": "c2e0e38dfa56d615986709b62c0d2405",
+    "semantic_hash": ""
+  },
+  "media/ex/plie_dumbbell_squat_1.webp": {
+    "mtime": 1794650261.2257717,
+    "seen": 1794681146.5218134,
+    "ast_hash": "b53cf64a64a09077fe84cdeea8862fcf",
+    "semantic_hash": ""
+  },
+  "media/ex/pullups_0.webp": {
+    "mtime": 1794650261.2697716,
+    "seen": 1794681146.5218155,
+    "ast_hash": "9adf872415958a4df7c3585efd86025f",
+    "semantic_hash": ""
+  },
+  "media/ex/pullups_1.webp": {
+    "mtime": 1794650261.3097715,
+    "seen": 1794681146.521817,
+    "ast_hash": "c592a72d6b65c8610e16d71ef8703170",
+    "semantic_hash": ""
+  },
+  "media/ex/push_ups_with_feet_elevated_0.webp": {
+    "mtime": 1794650261.7657716,
+    "seen": 1794681146.5218184,
+    "ast_hash": "9432012228d6cd1a1020f0a2ca35ce99",
+    "semantic_hash": ""
+  },
+  "media/ex/push_ups_with_feet_elevated_1.webp": {
+    "mtime": 1794650261.9817717,
+    "seen": 1794681146.52182,
+    "ast_hash": "df46d0e329efb4af4a977b7cd1b29ca9",
+    "semantic_hash": ""
+  },
+  "media/ex/pushups_0.webp": {
+    "mtime": 1794650262.0337715,
+    "seen": 1794681146.5218217,
+    "ast_hash": "75c4b7e5b5de3d71394340bc16f4c5eb",
+    "semantic_hash": ""
+  },
+  "media/ex/pushups_1.webp": {
+    "mtime": 1794650262.0857716,
+    "seen": 1794681146.521826,
+    "ast_hash": "5526ae1027f2101bdcff41aaf3d2fbb3",
+    "semantic_hash": ""
+  },
+  "media/ex/rear_leg_raises_0.webp": {
+    "mtime": 1794650262.1337717,
+    "seen": 1794681146.521828,
+    "ast_hash": "9016b7c1def062ac1cb74979cd1a103f",
+    "semantic_hash": ""
+  },
+  "media/ex/rear_leg_raises_1.webp": {
+    "mtime": 1794650262.1817715,
+    "seen": 1794681146.5218296,
+    "ast_hash": "fdcdd6993ef17b451fb04ddbd9974027",
+    "semantic_hash": ""
+  },
+  "media/ex/reverse_crunch_0.webp": {
+    "mtime": 1794650262.2377715,
+    "seen": 1794681146.5218315,
+    "ast_hash": "4a109472f7e920b4c7eab9b800d545b9",
+    "semantic_hash": ""
+  },
+  "media/ex/reverse_crunch_1.webp": {
+    "mtime": 1794650262.2897716,
+    "seen": 1794681146.5218332,
+    "ast_hash": "e64d3107f0964f8f86644514cc14832c",
+    "semantic_hash": ""
+  },
+  "media/ex/reverse_flyes_0.webp": {
+    "mtime": 1794650262.3457716,
+    "seen": 1794681146.521835,
+    "ast_hash": "0ff9d5f1003deea7401da48a02c870d8",
+    "semantic_hash": ""
+  },
+  "media/ex/reverse_flyes_1.webp": {
+    "mtime": 1794650262.3977716,
+    "seen": 1794681146.5218365,
+    "ast_hash": "98ec10953c9444006be6caa60f6f9123",
+    "semantic_hash": ""
+  },
+  "media/ex/reverse_machine_flyes_0.webp": {
+    "mtime": 1794650262.4657717,
+    "seen": 1794681146.5218382,
+    "ast_hash": "63e1caa3dacfb62923c0b26bf777a48b",
+    "semantic_hash": ""
+  },
+  "media/ex/reverse_machine_flyes_1.webp": {
+    "mtime": 1794650262.5337718,
+    "seen": 1794681146.5218399,
+    "ast_hash": "101d24ccc1992d41f99e0d57962fa7d6",
+    "semantic_hash": ""
+  },
+  "media/ex/romanian_deadlift_0.webp": {
+    "mtime": 1794650262.5857716,
+    "seen": 1794681146.5218418,
+    "ast_hash": "28bee281129d5e85262f4220576c0315",
+    "semantic_hash": ""
+  },
+  "media/ex/romanian_deadlift_1.webp": {
+    "mtime": 1794650262.6377716,
+    "seen": 1794681146.5218434,
+    "ast_hash": "e8576cd7569196fa17f8ca13c4ac89f5",
+    "semantic_hash": ""
+  },
+  "media/ex/rope_jumping_0.webp": {
+    "mtime": 1794650262.7137716,
+    "seen": 1794681146.521845,
+    "ast_hash": "75078fd72abcfa1ebaf38fe5b0a3ac82",
+    "semantic_hash": ""
+  },
+  "media/ex/rope_jumping_1.webp": {
+    "mtime": 1794650262.7857716,
+    "seen": 1794681146.5218468,
+    "ast_hash": "9919f0e5cb78b8527219e9c2342023b5",
+    "semantic_hash": ""
+  },
+  "media/ex/rowing_stationary_0.webp": {
+    "mtime": 1794650262.8577716,
+    "seen": 1794681146.5218482,
+    "ast_hash": "da25eb67f3e35d0ba9395aa108538c2b",
+    "semantic_hash": ""
+  },
+  "media/ex/rowing_stationary_1.webp": {
+    "mtime": 1794650262.9257717,
+    "seen": 1794681146.5218499,
+    "ast_hash": "9cb518aaa0886b5ad86b60e278595949",
+    "semantic_hash": ""
+  },
+  "media/ex/running_treadmill_0.webp": {
+    "mtime": 1794650262.9977717,
+    "seen": 1794681146.5218515,
+    "ast_hash": "b3304df65667ee269b8997744fe8ef1c",
+    "semantic_hash": ""
+  },
+  "media/ex/running_treadmill_1.webp": {
+    "mtime": 1794650263.0537717,
+    "seen": 1794681146.5218532,
+    "ast_hash": "f84e046b138e26c31e2e4f802f21231a",
+    "semantic_hash": ""
+  },
+  "media/ex/russian_twist_0.webp": {
+    "mtime": 1794650263.1137717,
+    "seen": 1794681146.5218549,
+    "ast_hash": "1b506b5cf1901910246196739701feea",
+    "semantic_hash": ""
+  },
+  "media/ex/russian_twist_1.webp": {
+    "mtime": 1794650263.1737716,
+    "seen": 1794681146.5218565,
+    "ast_hash": "8cf25578d1be800572f166cd997b9687",
+    "semantic_hash": ""
+  },
+  "media/ex/seated_cable_rows_0.webp": {
+    "mtime": 1794650263.2297716,
+    "seen": 1794681146.5218582,
+    "ast_hash": "a13b1908193737116e273d32a2cf9462",
+    "semantic_hash": ""
+  },
+  "media/ex/seated_cable_rows_1.webp": {
+    "mtime": 1794650263.2857716,
+    "seen": 1794681146.52186,
+    "ast_hash": "cc009fa0a252e5f88f99cf9000c25dfe",
+    "semantic_hash": ""
+  },
+  "media/ex/seated_floor_hamstring_stretch_0.webp": {
+    "mtime": 1794650263.3297718,
+    "seen": 1794681146.5218616,
+    "ast_hash": "c4c28f834029c724658926a706805145",
+    "semantic_hash": ""
+  },
+  "media/ex/seated_floor_hamstring_stretch_1.webp": {
+    "mtime": 1794650263.3737717,
+    "seen": 1794681146.5218635,
+    "ast_hash": "c4c28f834029c724658926a706805145",
+    "semantic_hash": ""
+  },
+  "media/ex/shoulder_press__with_bands_0.webp": {
+    "mtime": 1794650263.4257717,
+    "seen": 1794681146.521865,
+    "ast_hash": "4fcb0094eeaf8fea4276f979f89b2161",
+    "semantic_hash": ""
+  },
+  "media/ex/shoulder_press__with_bands_1.webp": {
+    "mtime": 1794650263.4817717,
+    "seen": 1794681146.5218668,
+    "ast_hash": "ac5388c8ce0425b6f2342f6b642109cc",
+    "semantic_hash": ""
+  },
+  "media/ex/side_bridge_0.webp": {
+    "mtime": 1794650263.5457716,
+    "seen": 1794681146.5218685,
+    "ast_hash": "dfd4e2dbd1bb827e2541a4348e179132",
+    "semantic_hash": ""
+  },
+  "media/ex/side_bridge_1.webp": {
+    "mtime": 1794650263.6057718,
+    "seen": 1794681146.5218706,
+    "ast_hash": "2acf45190f924831d858f1907cd45112",
+    "semantic_hash": ""
+  },
+  "media/ex/side_lateral_raise_0.webp": {
+    "mtime": 1794650263.6537716,
+    "seen": 1794681146.5218723,
+    "ast_hash": "11e15f0cfae43e414886184e911eef09",
+    "semantic_hash": ""
+  },
+  "media/ex/side_lateral_raise_1.webp": {
+    "mtime": 1794650263.6977718,
+    "seen": 1794681146.5218742,
+    "ast_hash": "1186d7d08626213e2f512991d3bdf00e",
+    "semantic_hash": ""
+  },
+  "media/ex/side_leg_raises_0.webp": {
+    "mtime": 1794650263.7377717,
+    "seen": 1794681146.5218759,
+    "ast_hash": "e43e9e9890d5ab0b4758f5694c1d3b77",
+    "semantic_hash": ""
+  },
+  "media/ex/side_leg_raises_1.webp": {
+    "mtime": 1794650263.7777717,
+    "seen": 1794681146.5218775,
+    "ast_hash": "73020c17f40c1c52782acb951e35765b",
+    "semantic_hash": ""
+  },
+  "media/ex/side_neck_stretch_0.webp": {
+    "mtime": 1794650263.8137717,
+    "seen": 1794681146.521879,
+    "ast_hash": "0aea220ab85580a289cf0b33bdf460c8",
+    "semantic_hash": ""
+  },
+  "media/ex/side_neck_stretch_1.webp": {
+    "mtime": 1794650263.8457718,
+    "seen": 1794681146.5218809,
+    "ast_hash": "f60447dd7be9e13fa051d8e7ef881ed6",
+    "semantic_hash": ""
+  },
+  "media/ex/single_leg_glute_bridge_0.webp": {
+    "mtime": 1794650263.9057717,
+    "seen": 1794681146.5218825,
+    "ast_hash": "9f2e186f634ec53c997e08cf6b9653c0",
+    "semantic_hash": ""
+  },
+  "media/ex/single_leg_glute_bridge_1.webp": {
+    "mtime": 1794650263.9657717,
+    "seen": 1794681146.5218842,
+    "ast_hash": "aca9453dab9b7d76efe46954e5c6e6ef",
+    "semantic_hash": ""
+  },
+  "media/ex/sit_squats_0.webp": {
+    "mtime": 1794650264.0057716,
+    "seen": 1794681146.5218859,
+    "ast_hash": "c4e13eea1549bc48e08fbd6c0aa286ff",
+    "semantic_hash": ""
+  },
+  "media/ex/sit_squats_1.webp": {
+    "mtime": 1794650264.0497718,
+    "seen": 1794681146.5218875,
+    "ast_hash": "44c8048fa969aabbc62bfcad25fa6c4a",
+    "semantic_hash": ""
+  },
+  "media/ex/split_squat_with_dumbbells_0.webp": {
+    "mtime": 1794650264.1417718,
+    "seen": 1794681146.521889,
+    "ast_hash": "4b0bcc2187882ba65dd02d1e08fa50b7",
+    "semantic_hash": ""
+  },
+  "media/ex/split_squat_with_dumbbells_1.webp": {
+    "mtime": 1794650264.2337718,
+    "seen": 1794681146.5218909,
+    "ast_hash": "c553afd0b7d0d38aa253972d100c3ba4",
+    "semantic_hash": ""
+  },
+  "media/ex/squats__with_bands_0.webp": {
+    "mtime": 1794650264.2857718,
+    "seen": 1794681146.5218925,
+    "ast_hash": "1b9d21fd29b837ac1913ba8ea98fe994",
+    "semantic_hash": ""
+  },
+  "media/ex/squats__with_bands_1.webp": {
+    "mtime": 1794650264.3537717,
+    "seen": 1794681146.5218942,
+    "ast_hash": "1d2c3055107b9a5e3abd6e9b46ee241f",
+    "semantic_hash": ""
+  },
+  "media/ex/standing_biceps_cable_curl_0.webp": {
+    "mtime": 1794650264.4337718,
+    "seen": 1794681146.521896,
+    "ast_hash": "bc7cc0446b9cd91a3c0d98d1252b8caa",
+    "semantic_hash": ""
+  },
+  "media/ex/standing_biceps_cable_curl_1.webp": {
+    "mtime": 1794650264.4937718,
+    "seen": 1794681146.5218978,
+    "ast_hash": "51ac5651a34f40bb9868f8ce137eeddb",
+    "semantic_hash": ""
+  },
+  "media/ex/standing_cable_chest_press_0.webp": {
+    "mtime": 1794650264.5657718,
+    "seen": 1794681146.5218992,
+    "ast_hash": "ba28a8a562372f732b3029759fef4e3b",
+    "semantic_hash": ""
+  },
+  "media/ex/standing_cable_chest_press_1.webp": {
+    "mtime": 1794650264.6417718,
+    "seen": 1794681146.521901,
+    "ast_hash": "c9e4d47daa56523f275e6b5a5c8a43bd",
+    "semantic_hash": ""
+  },
+  "media/ex/standing_dumbbell_calf_raise_0.webp": {
+    "mtime": 1794650264.6937718,
+    "seen": 1794681146.5219026,
+    "ast_hash": "eb16f52284b2131c9c7ecbc0e8c12d5c",
+    "semantic_hash": ""
+  },
+  "media/ex/standing_dumbbell_calf_raise_1.webp": {
+    "mtime": 1794650264.7377717,
+    "seen": 1794681146.5219045,
+    "ast_hash": "ed23ce1f2d766a5e518280e4fd647289",
+    "semantic_hash": ""
+  },
+  "media/ex/standing_dumbbell_triceps_extension_0.webp": {
+    "mtime": 1794650264.7857718,
+    "seen": 1794681146.521906,
+    "ast_hash": "37c3ca9d4861c34c8ca4bd60eefbc9d4",
+    "semantic_hash": ""
+  },
+  "media/ex/standing_dumbbell_triceps_extension_1.webp": {
+    "mtime": 1794650264.837772,
+    "seen": 1794681146.521908,
+    "ast_hash": "2b8c12f6bac2e1d60831d444e94a49f2",
+    "semantic_hash": ""
+  },
+  "media/ex/standing_elevated_quad_stretch_0.webp": {
+    "mtime": 1794650264.8857718,
+    "seen": 1794681146.5219097,
+    "ast_hash": "2a1d83008ebd3b73be0519771be7c871",
+    "semantic_hash": ""
+  },
+  "media/ex/standing_elevated_quad_stretch_1.webp": {
+    "mtime": 1794650264.9257717,
+    "seen": 1794681146.5219116,
+    "ast_hash": "01a81ee418844dd17e5be0506f41dedd",
+    "semantic_hash": ""
+  },
+  "media/ex/standing_hip_circles_0.webp": {
+    "mtime": 1794650264.9737718,
+    "seen": 1794681146.5219133,
+    "ast_hash": "d2a3787b68efa1e2add78bea6d6c9e57",
+    "semantic_hash": ""
+  },
+  "media/ex/standing_hip_circles_1.webp": {
+    "mtime": 1794650265.0177717,
+    "seen": 1794681146.5219152,
+    "ast_hash": "718ccc1642ab90e7c68b0a364636abb8",
+    "semantic_hash": ""
+  },
+  "media/ex/star_jump_0.webp": {
+    "mtime": 1794650265.0537717,
+    "seen": 1794681146.5219169,
+    "ast_hash": "5a6b9e0e969275566e19f03e2b9f2f30",
+    "semantic_hash": ""
+  },
+  "media/ex/star_jump_1.webp": {
+    "mtime": 1794650265.0937717,
+    "seen": 1794681146.5219188,
+    "ast_hash": "fbc46f33b01e937ad99347fb900e770d",
+    "semantic_hash": ""
+  },
+  "media/ex/stiff_legged_dumbbell_deadlift_0.webp": {
+    "mtime": 1794650265.1497717,
+    "seen": 1794681146.5219204,
+    "ast_hash": "118ac1526b8cc00d5d131a1c71f660c3",
+    "semantic_hash": ""
+  },
+  "media/ex/stiff_legged_dumbbell_deadlift_1.webp": {
+    "mtime": 1794650265.2097719,
+    "seen": 1794681146.5219223,
+    "ast_hash": "ac942690f4722414e5eafbc9e14dc8f2",
+    "semantic_hash": ""
+  },
+  "media/ex/stomach_vacuum_0.webp": {
+    "mtime": 1794650265.2657719,
+    "seen": 1794681146.5219238,
+    "ast_hash": "be3c80031912b6fb1d299ef5c8f3292a",
+    "semantic_hash": ""
+  },
+  "media/ex/stomach_vacuum_1.webp": {
+    "mtime": 1794650265.317772,
+    "seen": 1794681146.5219254,
+    "ast_hash": "f1ee26c38a213ed180cb0589b3bbcd03",
+    "semantic_hash": ""
+  },
+  "media/ex/straight_arm_pulldown_0.webp": {
+    "mtime": 1794650265.3777719,
+    "seen": 1794681146.5219269,
+    "ast_hash": "1830b19347b0cd041f5b2e772f519bb7",
+    "semantic_hash": ""
+  },
+  "media/ex/straight_arm_pulldown_1.webp": {
+    "mtime": 1794650265.4377718,
+    "seen": 1794681146.5219288,
+    "ast_hash": "a3fdd2daea4413529fb4a2c6ae86e3ee",
+    "semantic_hash": ""
+  },
+  "media/ex/superman_0.webp": {
+    "mtime": 1794650265.4937718,
+    "seen": 1794681146.5219305,
+    "ast_hash": "4faef2a32007ca81dc98ef9fc7188df6",
+    "semantic_hash": ""
+  },
+  "media/ex/superman_1.webp": {
+    "mtime": 1794650265.5537717,
+    "seen": 1794681146.5219324,
+    "ast_hash": "e51de4dfa0ec411ee878ce54d9891f7d",
+    "semantic_hash": ""
+  },
+  "media/ex/thigh_abductor_0.webp": {
+    "mtime": 1794650265.6217718,
+    "seen": 1794681146.521934,
+    "ast_hash": "3fbe01f562f4954a9e7b901a27975cc8",
+    "semantic_hash": ""
+  },
+  "media/ex/thigh_abductor_1.webp": {
+    "mtime": 1794650265.689772,
+    "seen": 1794681146.5219357,
+    "ast_hash": "9d82524954e5da35cbdfc72db3af772a",
+    "semantic_hash": ""
+  },
+  "media/ex/thigh_adductor_0.webp": {
+    "mtime": 1794650265.7577717,
+    "seen": 1794681146.5219374,
+    "ast_hash": "0673928d65c2cfc48a86d1b75a939482",
+    "semantic_hash": ""
+  },
+  "media/ex/thigh_adductor_1.webp": {
+    "mtime": 1794650265.8217719,
+    "seen": 1794681146.5219393,
+    "ast_hash": "c9f56865942e197f9f9fc8f485d87e7d",
+    "semantic_hash": ""
+  },
+  "media/ex/torso_rotation_0.webp": {
+    "mtime": 1794650265.8657718,
+    "seen": 1794681146.5219407,
+    "ast_hash": "02228144803ede34568d76db02817e0a",
+    "semantic_hash": ""
+  },
+  "media/ex/torso_rotation_1.webp": {
+    "mtime": 1794650265.909772,
+    "seen": 1794681146.5219426,
+    "ast_hash": "5b839f1354827ac4ca72ea6113fc92e4",
+    "semantic_hash": ""
+  },
+  "media/ex/tricep_dumbbell_kickback_0.webp": {
+    "mtime": 1794650265.9737718,
+    "seen": 1794681146.521944,
+    "ast_hash": "6594d6b8eab1415fb074ef8cb0b0cffa",
+    "semantic_hash": ""
+  },
+  "media/ex/tricep_dumbbell_kickback_1.webp": {
+    "mtime": 1794650266.0337718,
+    "seen": 1794681146.521946,
+    "ast_hash": "67c2253936742fbd4a81c16776fcf0be",
+    "semantic_hash": ""
+  },
+  "media/ex/triceps_pushdown_0.webp": {
+    "mtime": 1794650266.109772,
+    "seen": 1794681146.5219476,
+    "ast_hash": "a663d417011340791d8b62a1225d7e4c",
+    "semantic_hash": ""
+  },
+  "media/ex/triceps_pushdown_1.webp": {
+    "mtime": 1794650266.1737719,
+    "seen": 1794681146.5219493,
+    "ast_hash": "1f6d040758afa4bb48f80f820b319b4e",
+    "semantic_hash": ""
+  },
+  "media/ex/walking_treadmill_0.webp": {
+    "mtime": 1794650266.2297719,
+    "seen": 1794681146.521951,
+    "ast_hash": "a5de4aac8c575d05ee6c4e95a7a6effd",
+    "semantic_hash": ""
+  },
+  "media/ex/walking_treadmill_1.webp": {
+    "mtime": 1794650266.277772,
+    "seen": 1794681146.5219529,
+    "ast_hash": "7246f9e24cd95e8d888cefa2c32afc5f",
+    "semantic_hash": ""
+  },
+  "media/ex/wide_grip_lat_pulldown_0.webp": {
+    "mtime": 1794650266.333772,
+    "seen": 1794681146.5219545,
+    "ast_hash": "1f21f81081c65678068ba8a100f15f48",
+    "semantic_hash": ""
+  },
+  "media/ex/wide_grip_lat_pulldown_1.webp": {
+    "mtime": 1794650266.389772,
+    "seen": 1794681146.5219567,
+    "ast_hash": "24cf7da0df64963b838eb010c19ecae4",
+    "semantic_hash": ""
+  },
+  "media/ex/worlds_greatest_stretch_0.webp": {
+    "mtime": 1794650266.4337718,
+    "seen": 1794681146.5219584,
+    "ast_hash": "f5f854190ebeae5c3b416441d30b9f93",
+    "semantic_hash": ""
+  },
+  "media/ex/worlds_greatest_stretch_1.webp": {
+    "mtime": 1794650266.4737718,
+    "seen": 1794681146.5219605,
+    "ast_hash": "f2ab3f2e203ae5037f697b73f57a2214",
+    "semantic_hash": ""
+  }
+}

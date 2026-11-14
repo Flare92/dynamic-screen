@@ -1,6 +1,5 @@
 # Librerie incluse
 
-- `three.module.min.js` — three.js 0.170.0 (MIT)
 - `anthropic-sdk.js` — `@anthropic-ai/sdk` 1.6.0 (MIT), impacchettato per il browser con esbuild:
 
 ```bash

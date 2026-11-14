@@ -1,4 +1,4 @@
-// Effetti visivi, icone, suoni e caricamento del 3D.
+// Effetti visivi, icone, suoni e voce.
 
 export const ICON = {
   today: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>',
@@ -17,13 +17,6 @@ export const ICON = {
   mute: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>',
   video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="6" width="13" height="12" rx="2.5"/><path d="M16 10.5l5-3v9l-5-3z"/></svg>',
 };
-
-// ---------- 3D caricato solo quando serve ----------
-let mod = null;
-export async function load3D() {
-  if (!mod) mod = await import('./viewer3d.js');
-  return mod;
-}
 
 // ---------- Numeri che contano ----------
 export function countUp(root = document) {
@@ -53,7 +46,7 @@ export function burst(x = innerWidth / 2, y = innerHeight / 2) {
   document.body.appendChild(c);
   const ctx = c.getContext('2d');
   ctx.scale(dpr, dpr);
-  const cols = ['#c6ff3d', '#5cf0ff', '#9b7bff', '#ffffff'];
+  const cols = ['#e2603b', '#f2b84b', '#5e8c6a', '#f7c9b6'];
   const P = Array.from({ length: 130 }, () => {
     const a = Math.random() * Math.PI * 2, s = 3 + Math.random() * 9;
     return { x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 4, r: 2 + Math.random() * 3, c: cols[(Math.random() * cols.length) | 0], life: 1, rot: Math.random() * 6 };
