@@ -10,12 +10,16 @@ Prima di leggere i file uno per uno, interroga il grafo: costa circa 24 volte me
 - Dopo modifiche al codice: `graphify update .` (estrazione AST, nessun costo LLM)
 
 Mappa rapida dei moduli (comunità del grafo):
-- `js/app.js` – interfaccia, router, viste (Oggi, Piano, Esercizi, Progressi, Profilo, racconto, revisione)
-- `js/engine.js` – motore del piano: `derive`, `weekSchedule`/`mixedSchedule`, sessioni, `nutrition`, `generatePlan`, `coachSummary`
+- `js/app.js` – interfaccia, router, viste (Oggi, Allenamento, Alimentazione, Progressi, Profilo, percorso guidato, racconto, perché)
+- `js/flow.js` – percorso guidato dal coach: `PASSI` (una domanda per schermata), `passiPer`, `passiCoperti`
+- `js/indagine.js` – `SOGNI`, `ZONE`, `ZONE_PATTERNS`, `diagnosi` (cause reali del risultato cercato), `regoleCibo`
+- `js/engine.js` – motore del piano: `derive`, `weekSchedule`/`mixedSchedule`, `strengthSession` (zone prioritarie), `nutrition`, `generatePlan`, `coachSummary`
 - `js/assessment.js` + `js/assess-ui.js` – test fisici, punteggi, composizione corporea, KPI, precisione
 - `js/narrative.js` – relazione in testo libero: analisi offline in italiano e analisi con Claude
-- `js/gymreview.js` – revisione della scheda di palestra dell’utente: `parseGymList`, `reviewGym` (tieni/cambia/togli/aggiungi), `GYM_PICKS` (elenco da toccare), preferiti nel piano
-- `js/diet.js` – alimentazione per tipo di dieta e giornata tipo
-- `js/exercises.js`, `js/guide.js`, `js/motions.js` – esercizi, guide tecniche, pose 3D
-- `js/viewer3d.js`, `js/sheet.js`, `js/player.js`, `js/fx.js` – 3D, scheda esercizio, allenamento guidato, effetti
-- Test: `npm test` (node --test, 38 test)
+- `js/gymreview.js` – revisione della scheda di palestra dell’utente: `parseGymList`, `reviewGym`, `GYM_PICKS`
+- `js/diet.js` – tipi di dieta, `weekMenu` (menu settimanale con grammature), `mealStructure`, lista della spesa
+- `js/exercises.js`, `js/guide.js`, `js/guide-extra.js` – esercizi e guide tecniche
+- `js/demos.js`, `js/demo.js` – foto reali degli esercizi (`media/ex/`), riquadro animato e miniature
+- `js/sheet.js`, `js/player.js`, `js/fx.js` – scheda esercizio, allenamento guidato, effetti
+- Test: `npm test` (node --test, 49 test)
+- Dopo ogni rilascio: aggiorna `VERSION` in `sw.js`

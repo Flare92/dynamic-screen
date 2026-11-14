@@ -335,6 +335,7 @@ function portionLabel(f, g) {
   if (f === 'verdure' || f === 'insalata') return g >= 200 ? 'porzione abbondante' : 'una porzione';
   if (f === 'frutta') return g >= 250 ? '2 frutti' : '1 frutto';
   if (f === 'banana') return '1 banana';
+  if (f === 'latte' || f === 'bevSoia') return `${g} ml`;
   return `${g} g`;
 }
 
@@ -388,7 +389,14 @@ function portion(dish, kcalT, protT, ex) {
     if (diff > 60) g[oil] = Math.min(20, g[oil] + Math.round(diff / 9 / 5) * 5);
     else if (diff < -60) g[oil] = Math.max(5, g[oil] - 5);
   }
-  if (kcal() > kcalT * 1.15) dish.parts.forEach((x, i) => { if (['noci', 'arachidi', 'avocado'].includes(x.f)) g[i] *= 0.6; });
+  // 4) pasti piccoli (diete sotto le 1.800 kcal): meno condimenti e, se serve, carboidrati sotto la porzione standard
+  if (kcal() > kcalT * 1.06) dish.parts.forEach((x, i) => { if (['noci', 'arachidi', 'avocado', 'feta', 'hummus', 'miele'].includes(x.f)) g[i] *= 0.6; if (x.f === 'olio') g[i] = 5; });
+  if (kcal() > kcalT * 1.06 && C.length) {
+    const extra = kcal() - kcalT * 1.03;
+    const fromC = C.reduce((a, i) => a + (FOOD[dish.parts[i].f][1] * g[i]) / 100, 0);
+    const k = Math.max(0.55, (fromC - extra) / Math.max(1, fromC));
+    C.forEach((i) => { g[i] *= k; });
+  }
   return totals({ name: dish.n, items: dish.parts.map((x, i) => mkItem(x.f, g[i], ex)), rapido: !!dish.rapido });
 }
 

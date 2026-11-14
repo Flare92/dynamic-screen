@@ -1,12 +1,29 @@
-# Ritmo – la tua routine fisica su misura
+# Ritmo – il tuo coach
 
-PWA (installabile sul telefono, funziona offline) che crea un piano di allenamento personalizzato in base a:
+PWA (installabile sul telefono, funziona offline) che si comporta come un personal trainer e un nutrizionista:
+prima indaga, poi prepara allenamento e menu su misura, poi segue la persona giorno per giorno.
 
-- **corporatura**: sesso, età, altezza, peso
-- **storia clinica**: pressione alta, cuore, diabete, asma, schiena, ginocchia, spalle, anche, osteoporosi, reni, gravidanza, interventi recenti, betabloccanti
-- **abitudini**: lavoro, passi, sonno, esperienza, alimentazione, fumo, alcol, stress
-- **obiettivo**: perdere peso, massa muscolare, tonificare, resistenza, mobilità, salute (con peso e data obiettivo facoltativi)
-- **tempo**: minuti al giorno (10–120) e giorni a settimana (2–7), attrezzi disponibili
+## Novità della versione 5: indagine, foto reali, menu, tema caldo
+
+- **Percorso guidato dal coach**: una domanda per schermata, in prima persona, con le sole domande che riguardano quella persona
+  (obiettivo e zone, girovita, dove accumula, plica addominale, gonfiore, postura, gravidanza o parto recente, salute e dolori,
+  giornata, sonno e stress, tempo e luoghi, scheda di palestra, abitudini a tavola). Chi preferisce può raccontarsi a parole:
+  l’app mostra cosa ha capito e chiede solo ciò che manca.
+- **Diagnosi "Ecco cosa ho capito di te"**: per ogni risultato cercato l’app distingue le cause reali (grasso addominale, gonfiore,
+  postura, core debole, post-parto, sedentarietà, poco sonno, stress) e per ciascuna dice cosa cambia nel piano.
+- **Zone prioritarie**: addome, glutei, gambe, braccia, petto, schiena, spalle. I loro esercizi fondamentali aprono la sessione,
+  hanno una serie in più e si aggiunge un esercizio complementare dedicato; le sessioni brevi diventano "focus" sulle zone.
+- **Protocollo ventre piatto**: deficit calorico solo se il girovita o la plica lo giustificano; attivazione profonda (vacuum,
+  dead bug) prima di plank e addominali dinamici; correttivi per la postura; regole anti-gonfiore; niente crunch dopo il parto.
+- **Foto reali al posto del manichino 3D**: ogni esercizio mostra la posizione di partenza e di arrivo con foto di persone vere
+  (118 esercizi su 135; per gli altri, descrizione e collegamento a un video). Le foto compaiono anche negli elenchi.
+- **39 esercizi nuovi**: addome, braccia, glutei e macchine da palestra, ciascuno con guida tecnica completa.
+- **Menu settimanale con grammature**: piatti reali filtrati per tipo di dieta, intolleranze (lattosio, glutine, frutta secca),
+  cibi non graditi, numero di pasti, colazione dolce o salata, pranzo a casa, portato o fuori, tempo per cucinare.
+  Porzioni calcolate su calorie e proteine, lista della spesa e regole personali ricavate dalle abitudini dichiarate.
+- **Interfaccia più semplice**: quattro schede (Oggi, Allenamento, Alimentazione, Progressi), una sola cosa da fare per volta
+  nella schermata Oggi, dettagli tecnici raccolti in pagine secondarie.
+- **Tema caldo e chiaro**: carta color crema, terracotta e verde salvia, caratteri Fraunces e Figtree.
 
 ## Novità della versione 4: la tua relazione diventa il piano
 
@@ -19,7 +36,7 @@ PWA (installabile sul telefono, funziona offline) che crea un piano di allenamen
 ## Novità della versione 3: personalizzazione misurata
 
 - **Punto di partenza reale**: circonferenze (vita, collo, fianchi) → massa grassa (formula U.S. Navy), massa magra e rapporto vita/altezza; frequenza cardiaca a riposo e pressione; **mappa dei dolori** per 8 zone del corpo.
-- **Test fisici guidati in 3D** con strumenti integrati: piegamenti, alzate dalla sedia in 30 s (conto alla rovescia), plank e sospensione alla sbarra (cronometro), step test di 3 minuti (metronomo a 96 bpm + minuto di conteggio del polso), autovalutazione del fiato, flessibilità posteriore, mobilità di spalle e caviglia, squat profondo, equilibrio. I test non sicuri per la persona vengono saltati in automatico.
+- **Test fisici guidati** (con foto dimostrative) e strumenti integrati: piegamenti, alzate dalla sedia in 30 s (conto alla rovescia), plank e sospensione alla sbarra (cronometro), step test di 3 minuti (metronomo a 96 bpm + minuto di conteggio del polso), autovalutazione del fiato, flessibilità posteriore, mobilità di spalle e caviglia, squat profondo, equilibrio. I test non sicuri per la persona vengono saltati in automatico.
 - **Punteggi rispetto ai valori di riferimento** per età e sesso (ACSM, YMCA, Senior Fitness Test) e profilo a radar su 7 aree.
 - **Motore su misura**:
   - livello separato per spinta, tirata, gambe, core e cardio;
@@ -33,28 +50,25 @@ PWA (installabile sul telefono, funziona offline) che crea un piano di allenamen
 - **Traguardi misurabili (KPI)** coerenti con l’obiettivo, con valore di partenza, traguardo e data (peso, vita, massa grassa, massa magra, test di forza, recupero cardiaco, mobilità…), verificati con il **test di controllo ogni 4 settimane**.
 - **Indice di precisione** del piano: quanto il piano si basa su dati misurati invece che su stime.
 
-## Novità della versione 2
+## Versione 2
 
-- **Design "neon lab"**: tema scuro con accenti neon, sfondo animato, transizioni tra le schermate (View Transitions), anelli di progresso, numeri che contano, esplosione di particelle quando completi un allenamento.
-- **Esercizi in 3D**: ogni esercizio (93) è animato su un manichino olografico (Three.js) con i **muscoli coinvolti che si illuminano**, attrezzi (manubri, bilanciere, elastici, panca, sbarra, muro, bici…), rotazione con il dito, vista fronte/lato, rallentatore.
-- **Guide ultra dettagliate**: per ogni esercizio perché farlo, posizione di partenza, esecuzione passo passo, respirazione, ritmo, errori comuni, versione più facile e più difficile, avvertenze di sicurezza, link alla ricerca di video tutorial.
-- **Allenamento guidato a schermo intero**: il manichino mostra l’esercizio, timer per esercizi a tempo, contatore delle serie, recuperi automatici con anteprima del prossimo esercizio, suggerimenti tecnici che scorrono, bip negli ultimi secondi, **guida vocale in italiano**, schermo sempre acceso.
-- **Libreria 3D**: tutti gli esercizi, con ricerca per nome o muscolo e filtro "adatti a te".
+- **Guide dettagliate**: per ogni esercizio perché farlo, posizione di partenza, esecuzione passo passo, respirazione, ritmo, errori comuni, versione più facile e più difficile, avvertenze di sicurezza.
+- **Allenamento guidato** a schermo intero con timer, serie, recuperi e voce.
 
 ## Cosa fa
 
 | Sezione | Contenuto |
 |---|---|
-| **Oggi** | Allenamento del giorno con checklist, spiegazione di ogni esercizio, timer di recupero, feedback (facile/giusto/duro), abitudini quotidiane, pesata settimanale. Nei giorni di riposo: recupero attivo e possibilità di recuperare un allenamento saltato. |
-| **Piano** | Settimana completa, data stimata per raggiungere l’obiettivo con le tappe, calorie e macronutrienti, abitudini prioritarie, avvisi di sicurezza, spiegazione di cosa è stato escluso e perché. |
-| **Esercizi** | Libreria 3D con ricerca e filtri; quelli non adatti alla tua salute sono segnalati. |
-| **Progressi** | Grafico del peso rispetto alla previsione, costanza, serie di allenamenti consecutivi e **suggerimenti di adattamento** applicabili con un tocco (calorie, giorni, livello). |
-| **Profilo** | Modifica dati e obiettivi, backup/ripristino in JSON, installazione. |
+| **Oggi** | La frase del coach, l’allenamento del giorno con le foto e il tasto per iniziare, il prossimo passo utile (uno solo), i pasti del giorno, le abitudini e la pesata settimanale. |
+| **Allenamento** | Perché questo piano (la diagnosi), la settimana con tutti gli esercizi, la scheda di palestra, il traguardo, la libreria degli esercizi e il punto di partenza. |
+| **Alimentazione** | Calorie e macronutrienti spiegati, menu del giorno con grammature per tutti i 7 giorni, regole personali, lista della spesa, integrazioni da valutare. |
+| **Progressi** | Costanza, suggerimenti del coach applicabili con un tocco, traguardi misurabili, grafico del peso, storico. |
+| **Profilo** | Ogni sezione dell’indagine si riapre e si modifica; copia e ripristino dei dati; installazione. |
 
 ### Come vengono costruiti i piani
 
 - **Calorie**: Mifflin-St Jeor × livello di attività (lavoro + passi + allenamenti). Deficit pari allo 0,5–0,75% del peso a settimana, mai sotto il metabolismo basale; surplus moderato per la massa; niente deficit in gravidanza; peso obiettivo limitato a BMI ≥ 18,5.
-- **Forza**: schemi motori fondamentali (squat, anca, affondi, spinta, tirata, core) scelti tra ~90 esercizi filtrati per attrezzi, livello e controindicazioni. Serie, ripetizioni e recuperi dipendono da obiettivo e livello.
+- **Forza**: schemi motori fondamentali (squat, anca, affondi, spinta, tirata, core) scelti tra 135 esercizi filtrati per attrezzi, livello e controindicazioni. Serie, ripetizioni e recuperi dipendono da obiettivo e livello.
 - **Progressione**: cicli di 4 settimane (adattamento → costruzione → spinta → scarico).
 - **Cardio**: zone di frequenza cardiaca con la formula di Tanaka; metodo corsa-cammino per i principianti; niente intervalli intensi in caso di problemi cardiaci, pressione alta o gravidanza.
 - **Sicurezza**: le condizioni cliniche escludono esercizi specifici (es. salti con ginocchia/anche/osteoporosi, esercizi sdraiati in gravidanza, carichi massimali con ipertensione) e generano avvisi “consulta il medico prima di iniziare” quando serve.
@@ -88,31 +102,34 @@ Dopo ogni modifica ai file, aggiorna `VERSION` in `sw.js` così i telefoni scari
 ```
 index.html            shell dell'app
 manifest.webmanifest  manifest PWA
-sw.js                 service worker (offline)
-css/style.css         stile (tema chiaro/scuro automatico)
+sw.js                 service worker (offline; foto in una cache a parte)
+css/style.css         tema caldo e chiaro
 js/app.js             interfaccia, navigazione, salvataggio
+js/flow.js            percorso guidato: le domande del coach
+js/indagine.js        obiettivi, zone, diagnosi, regole alimentari
 js/engine.js          motore: piano, alimentazione, tempi, abitudini, adattamento
 js/exercises.js       database esercizi con controindicazioni
 js/guide.js           guida tecnica dettagliata di ogni esercizio
+js/guide-extra.js     guide degli esercizi complementari
+js/demos.js           quale foto mostra quale esercizio
+js/demo.js            riquadro con le due foto che si alternano, miniature
 js/assessment.js      test, punteggi, composizione corporea, KPI, indice di precisione
-js/assess-ui.js       valutazione guidata con cronometro, metronomo e 3D
+js/assess-ui.js       valutazione guidata con cronometro e metronomo
 js/narrative.js       relazione in testo libero: analisi offline e con Claude
-js/diet.js            alimentazione per tipo di dieta e giornata tipo
-js/motions.js         pose chiave delle animazioni 3D
-js/viewer3d.js        manichino 3D, animazione, attrezzi, muscoli evidenziati
+js/gymreview.js       revisione della scheda di palestra
+js/diet.js            tipi di dieta, menu settimanale con grammature, lista della spesa
 js/player.js          allenamento guidato a schermo intero
-js/sheet.js           scheda esercizio (3D + guida)
+js/sheet.js           scheda esercizio (foto + guida)
 js/fx.js              icone, effetti, suoni, voce
-vendor/               three.js (MIT), SDK Anthropic pre-impacchettato (MIT, caricato solo per l’analisi con Claude)
-fonts/                Space Grotesk e JetBrains Mono (SIL OFL 1.1)
-dev/pose-lab.html     pagina di sviluppo per controllare le animazioni una per una
+media/ex/             foto degli esercizi (free-exercise-db, pubblico dominio)
+vendor/               SDK Anthropic pre-impacchettato (MIT, caricato solo per l’analisi con Claude)
+fonts/                Fraunces e Figtree (SIL OFL 1.1)
 tests/                test (node --test)
 ```
 
-### Aggiungere o correggere un’animazione
+### Foto degli esercizi
 
-Le animazioni sono pose chiave in `js/motions.js` (angoli in gradi di colonna, spalle, gomiti, anche, ginocchia, caviglie). Il visualizzatore interpola le pose, appoggia il corpo a terra e tiene fermi piedi o mani. Per provarne una apri `dev/pose-lab.html` con il server locale e nella console scrivi `show('s_squat', 0.5)`.
-
-### Video reali
-
-L’app non incorpora video di terzi (diritti d’autore). Dalla scheda di ogni esercizio puoi aprire una ricerca di video tutorial; se in futuro registri tuoi video, basta aggiungere un campo `video` all’esercizio in `js/guide.js` e mostrarlo nella scheda.
+Le foto vengono da [free-exercise-db](https://github.com/yuhonas/free-exercise-db) (pubblico dominio, Unlicense), ridimensionate in
+`media/ex/<nome>_0.webp` (partenza) e `<nome>_1.webp` (arrivo). `js/demos.js` collega ogni esercizio alla sua coppia di foto e,
+quando la foto usa un attrezzo diverso, a una nota che lo spiega. Per aggiungere una foto: metti i due file in `media/ex/` e
+aggiungi la riga in `DEMOS`. Gli esercizi senza foto mostrano la descrizione e un collegamento a una ricerca di video.
