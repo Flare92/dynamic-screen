@@ -25,4 +25,4 @@ Mappa rapida dei moduli (comunità del grafo):
 - `js/demos.js`, `js/demo.js` – foto reali degli esercizi (`media/ex/`), riquadro animato e miniature
 - `js/sheet.js`, `js/player.js`, `js/fx.js` – scheda esercizio, allenamento guidato, effetti
 - Test: `npm test` (node --test, 61 test)
-- Dopo ogni rilascio: aggiorna `VERSION` in `sw.js`
+- Dopo ogni rilascio: aggiorna `VERSION` in `sw.js` e `APP_VERSION` in `js/app.js`
