@@ -3,14 +3,10 @@
   "4": "diet.js",
   "6": "narrative.js",
   "7": "Guided 3D Physical Tests",
-  "8": "esc",
-  "16": "getPlan",
-  "17": "weekdayIndex",
-  "18": "fromISO",
-  "19": "flow.js",
-  "20": "gymPickerHTML",
-  "21": "sheet.js",
-  "22": "Ritmo – note per l'assistente",
-  "23": "ai.js",
-  "24": "weekMenu"
+  "8": "flow.js",
+  "16": "analyzeStory",
+  "17": "gymreview.js",
+  "18": "narrative.test.js",
+  "19": "indagine.test.js",
+  "23": "ai.js"
 }

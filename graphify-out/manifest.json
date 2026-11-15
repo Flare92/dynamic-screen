@@ -6,9 +6,9 @@
     "semantic_hash": "6e797710430a9dd9332d689328eb990b"
   },
   "js/app.js": {
-    "mtime": 1794784821.9453557,
-    "seen": 1794784880.2018034,
-    "ast_hash": "73f108d35c87fa2b5783f682f9063805",
+    "mtime": 1794785235.6942852,
+    "seen": 1794785238.4270957,
+    "ast_hash": "38fdf9b21b31831dbb96ad27a8471733",
     "semantic_hash": ""
   },
   "js/assess-ui.js": {
@@ -54,9 +54,9 @@
     "semantic_hash": ""
   },
   "js/narrative.js": {
-    "mtime": 1794219466.994267,
-    "seen": 1794219540.5617733,
-    "ast_hash": "46196ac11b3316b467caab6fc714672c",
+    "mtime": 1794785142.227405,
+    "seen": 1794785238.427132,
+    "ast_hash": "7e3cb12c8f5bcad431f8bd6cc0688efc",
     "semantic_hash": ""
   },
   "js/player.js": {
@@ -78,9 +78,9 @@
     "semantic_hash": "fdc1c7a41a90c4fa577f7832bf39d224"
   },
   "sw.js": {
-    "mtime": 1794784653.653402,
-    "seen": 1794784880.2018435,
-    "ast_hash": "beae9228219443ef6b4e302fe874b1c6",
+    "mtime": 1794785213.4611902,
+    "seen": 1794785238.4271388,
+    "ast_hash": "7adc4d526bdc1a373006cac9d69a79c2",
     "semantic_hash": ""
   },
   "tests/assessment.test.js": {
@@ -114,9 +114,9 @@
     "semantic_hash": "b5dbdf32033c6b8dffada33e409bab6a"
   },
   "README.md": {
-    "mtime": 1794784875.701864,
-    "seen": 1794784880.2018588,
-    "ast_hash": "264d2d9542bcdf53f95f7ce3927b46c1",
+    "mtime": 1794785235.6951568,
+    "seen": 1794785238.4271586,
+    "ast_hash": "5f159c99735b732b1b93a11953d86873",
     "semantic_hash": ""
   },
   "index.html": {
@@ -126,9 +126,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794784875.7023284,
-    "seen": 1794784880.2018573,
-    "ast_hash": "88175fe8172ded7baecf46f841bb9d63",
+    "mtime": 1794785235.6960697,
+    "seen": 1794785238.427157,
+    "ast_hash": "6c9a23522ae8106e4a2b3c40c5a886ec",
     "semantic_hash": ""
   },
   "js/gymreview.js": {
@@ -180,9 +180,9 @@
     "semantic_hash": ""
   },
   "js/ai.js": {
-    "mtime": 1794784416.2738667,
-    "seen": 1794784880.2017994,
-    "ast_hash": "caaef08cef1333e64e400337ef52f630",
+    "mtime": 1794785235.6779153,
+    "seen": 1794785238.4270904,
+    "ast_hash": "71dbedf96f7c4d92ac7c8efcde3f6d50",
     "semantic_hash": ""
   },
   "js/coppia.js": {
@@ -201,6 +201,12 @@
     "mtime": 1794784653.6598237,
     "seen": 1794784880.201848,
     "ast_hash": "e67b8da3f711e9f9dd9af978de6d9b6c",
+    "semantic_hash": ""
+  },
+  "tests/ai.test.js": {
+    "mtime": 1794785196.176172,
+    "seen": 1794785238.427141,
+    "ast_hash": "ca6854897282160792c7131070412a9b",
     "semantic_hash": ""
   }
 }

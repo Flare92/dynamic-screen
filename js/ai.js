@@ -1,11 +1,69 @@
-// Intelligenza artificiale (facoltativa): Claude con la chiave API della persona, chiamato dal browser.
+// Intelligenza artificiale (facoltativa), chiamata dal browser con la chiave della persona:
+// - Gemini 3.8 Flash (Google): ha un piano gratuito, chiave da Google AI Studio;
+// - Claude (Anthropic): a pagamento, chiave da console.anthropic.com.
 // Ogni funzione ha un'alternativa offline nell'app: l'AI migliora le scelte, non è indispensabile.
 
 import { FOOD_IDS, foodMacros, foodLabel } from './diet.js';
 
-async function ask(apiKey, { system, user, schema, maxTokens = 8000 }) {
+export const PROVIDERS = {
+  gemini: { label: 'Gemini 3.8 Flash', by: 'Google', free: true, keyUrl: 'https://aistudio.google.com/apikey', keyHint: 'Incolla la chiave (AIza…)', keyRe: /^AIza[\w-]{20,}$/ },
+  claude: { label: 'Claude', by: 'Anthropic', free: false, keyUrl: 'https://console.anthropic.com/settings/keys', keyHint: 'Incolla la chiave (sk-ant-…)', keyRe: /^sk-ant-/ },
+};
+const KEY_STORE = { gemini: 'ritmo.geminikey', claude: 'ritmo.aikey' };
+const PROV_STORE = 'ritmo.aiprov';
+const ls = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* */ } return null; };
+
+/** il motore scelto e la sua chiave; null se l'AI non è attiva */
+export function aiConfig() {
+  let provider = ls(PROV_STORE);
+  if (!PROVIDERS[provider]) provider = ls(KEY_STORE.gemini) ? 'gemini' : ls(KEY_STORE.claude) ? 'claude' : 'gemini';
+  const key = ls(KEY_STORE[provider]);
+  return key ? { provider, key, ...PROVIDERS[provider] } : null;
+}
+export const aiProvider = () => { const p = ls(PROV_STORE); return PROVIDERS[p] ? p : (ls(KEY_STORE.claude) && !ls(KEY_STORE.gemini) ? 'claude' : 'gemini'); };
+export function setAiProvider(provider) { if (PROVIDERS[provider]) ls(PROV_STORE, provider); }
+export function setAiKey(provider, key) { ls(KEY_STORE[provider], key); if (key) ls(PROV_STORE, provider); }
+export const hasAiKey = (provider) => !!ls(KEY_STORE[provider]);
+
+// ---------- Gemini (REST, risposta JSON vincolata allo schema)
+export const GEMINI_MODEL = 'gemini-3.8-flash';
+const GEMINI_FALLBACK = 'gemini-flash-latest';
+
+async function askGemini(key, { system, user, schema, maxTokens }, model = GEMINI_MODEL, strict = true) {
+  const generationConfig = { responseMimeType: 'application/json', maxOutputTokens: maxTokens };
+  if (strict) generationConfig.responseJsonSchema = schema;
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+    body: JSON.stringify({
+      // senza vincolo di schema, lo schema va nelle istruzioni
+      systemInstruction: { parts: [{ text: strict ? system : `${system}\n\nRispondi solo con un oggetto JSON valido conforme a questo JSON Schema:\n${JSON.stringify(schema)}` }] },
+      contents: [{ role: 'user', parts: [{ text: user }] }],
+      generationConfig,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = data?.error?.message || '';
+    // se il modello non è disponibile per questa chiave, usa l'ultimo Flash disponibile
+    if (res.status === 404 && model !== GEMINI_FALLBACK) return askGemini(key, { system, user, schema, maxTokens }, GEMINI_FALLBACK, strict);
+    // se lo schema non è accettato, riprova con lo schema nelle istruzioni
+    if (res.status === 400 && strict && !/API key/i.test(msg)) return askGemini(key, { system, user, schema, maxTokens }, model, false);
+    const err = new Error(data?.error?.message || `errore ${res.status}`);
+    err.status = res.status === 400 && /API key/i.test(data?.error?.message || '') ? 401 : res.status;
+    throw err;
+  }
+  if (data.promptFeedback?.blockReason) throw new Error('Gemini non ha potuto rispondere a questa richiesta.');
+  const cand = data.candidates?.[0];
+  const text = (cand?.content?.parts || []).filter((p) => !p.thought).map((p) => p.text || '').join('');
+  if (!text) throw new Error(cand?.finishReason === 'MAX_TOKENS' ? 'Risposta incompleta, riprova.' : 'Gemini non ha risposto, riprova.');
+  try { return JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); } catch { throw new Error('Risposta non leggibile, riprova.'); }
+}
+
+// ---------- Claude (SDK Anthropic, output strutturato)
+async function askClaude(key, { system, user, schema, maxTokens }) {
   const { Anthropic, betaJSONSchemaOutputFormat } = await import('../vendor/anthropic-sdk.js');
-  const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true, maxRetries: 1, timeout: 90_000 });
+  const client = new Anthropic({ apiKey: key, dangerouslyAllowBrowser: true, maxRetries: 1, timeout: 90_000 });
   const response = await client.beta.messages.parse({
     model: 'claude-opus-5-5',
     max_tokens: maxTokens,
@@ -20,9 +78,15 @@ async function ask(apiKey, { system, user, schema, maxTokens = 8000 }) {
   return response.parsed_output;
 }
 
+/** chiede una risposta JSON che rispetta lo schema al motore scelto */
+export async function ask(cfg, { system, user, schema, maxTokens = 8000 }) {
+  if (!cfg?.key) throw new Error('AI non attiva');
+  return cfg.provider === 'claude' ? askClaude(cfg.key, { system, user, schema, maxTokens }) : askGemini(cfg.key, { system, user, schema, maxTokens });
+}
+
 /** messaggio d'errore comprensibile */
 export function aiError(e) {
-  if (e?.status === 401) return 'la chiave API non è valida';
+  if (e?.status === 401 || e?.status === 403) return 'la chiave API non è valida';
   if (e?.status === 429) return 'troppe richieste, riprova tra un minuto';
   if (e?.status === 529 || e?.status === 503) return 'il servizio è momentaneamente occupato';
   if (!navigator.onLine) return 'sei offline';
@@ -81,7 +145,7 @@ Regole:
  * have: id degli alimenti spuntati · altro: testo libero · pasto: nome del pasto · target: { kcal, protein, carbs?, fat? }
  * p: profilo (dieta, intolleranze, noncibi, cucina, obiettivo)
  */
-export async function aiRicette(apiKey, { have, altro, pasto, target, p, dietaLabel }) {
+export async function aiRicette(cfg, { have, altro, pasto, target, p, dietaLabel }) {
   const user = [
     `Pasto: ${pasto}.`,
     `Obiettivo del pasto: circa ${Math.round(target.kcal)} kcal e ${Math.round(target.protein)} g di proteine${target.carbs ? `, ${Math.round(target.carbs)} g di carboidrati, ${Math.round(target.fat)} g di grassi` : ''}.`,
@@ -91,7 +155,7 @@ export async function aiRicette(apiKey, { have, altro, pasto, target, p, dietaLa
     p.cucina === 'poco' ? 'Ha pochissimo tempo per cucinare: massimo 15 minuti.' : '',
     `In casa ha: ${[...have.map(foodLabel), altro].filter(Boolean).join(', ') || 'nulla di specificato'}.`,
   ].filter(Boolean).join('\n');
-  const r = await ask(apiKey, { system: RICETTE_SYSTEM, user, schema: RICETTE_SCHEMA });
+  const r = await ask(cfg, { system: RICETTE_SYSTEM, user, schema: RICETTE_SCHEMA });
   // i valori degli alimenti in tabella si ricalcolano: così le calorie sono coerenti con il resto del piano
   return r.ricette.map((x) => {
     const items = x.ingredienti.map((i) => {
@@ -112,7 +176,7 @@ Hai davanti la sua settimana e un elenco di opzioni già calcolate dall'app (son
 Scegli l'opzione migliore pensando a: costanza nel tempo, recupero, obiettivo, impegni dichiarati.
 Rispondi in italiano, in seconda persona, con tono caldo e concreto. Niente diagnosi mediche: con dolori nuovi o forti consiglia il medico.`;
 
-export async function aiGiornata(apiKey, { opzioni, settimana, risposte, nota, obiettivo }) {
+export async function aiGiornata(cfg, { opzioni, settimana, risposte, nota, obiettivo }) {
   const schema = {
     type: 'object', additionalProperties: false,
     properties: {
@@ -129,5 +193,5 @@ export async function aiGiornata(apiKey, { opzioni, settimana, risposte, nota, o
     nota ? `Ha scritto: "${nota}"` : '',
     'Opzioni:', ...opzioni.map((o) => `- ${o.id}: ${o.title}. ${o.text}`),
   ].filter(Boolean).join('\n');
-  return ask(apiKey, { system: GIORNATA_SYSTEM, user, schema, maxTokens: 2000 });
+  return ask(cfg, { system: GIORNATA_SYSTEM, user, schema, maxTokens: 2000 });
 }

@@ -20,7 +20,8 @@ prima indaga, poi prepara allenamento e menu su misura, poi segue la persona gio
 - **Ricette con quello che hai in casa**: dalla dispensa (alimenti da toccare più testo libero) ricette con grammature
   calcolate sul pasto da sostituire. Offline con i calcoli integrati; con Claude ricette vere e varie, con i valori
   ricalcolati sulla tabella di Ritmo. "Mangio questo" sostituisce il pasto nel menu.
-- **Coach AI**: con la propria chiave API Anthropic, Claude sceglie tra le opzioni della giornata calcolate dall’app e spiega
+- **Coach AI con Gemini 3.8 Flash (gratuito) o Claude**: si sceglie nel profilo e si incolla la propria chiave
+  (Gemini: chiave gratuita da Google AI Studio; Claude: chiave a pagamento da Anthropic). L’AI sceglie tra le opzioni della giornata calcolate dall’app e spiega
   perché (non può proporre cambi non previsti). Senza chiave tutto funziona con i calcoli integrati.
 
 ## Novità della versione 5: indagine, foto reali, menu, tema caldo
@@ -140,7 +141,7 @@ js/gymreview.js       revisione della scheda di palestra
 js/diet.js            tipi di dieta, menu settimanale e di coppia, ricette dalla dispensa, lista della spesa
 js/giornata.js        giornata flessibile: opzioni per cambiare la settimana, applica e annulla
 js/coppia.js          codice di coppia, settimana insieme, giorno migliore per allenarsi insieme
-js/ai.js              Claude: ricette dalla dispensa e scelta della giornata
+js/ai.js              AI (Gemini 3.8 Flash via REST o Claude via SDK): ricette dalla dispensa, scelta della giornata, racconto
 js/player.js          allenamento guidato a schermo intero
 js/sheet.js           scheda esercizio (foto + guida)
 js/fx.js              icone, effetti, suoni, voce
