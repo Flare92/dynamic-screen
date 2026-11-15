@@ -4,9 +4,13 @@
   "6": "narrative.js",
   "7": "Guided 3D Physical Tests",
   "8": "esc",
-  "16": "viewToday",
-  "17": "route",
+  "16": "getPlan",
+  "17": "weekdayIndex",
   "18": "fromISO",
-  "19": "startPlayer",
-  "20": "gymPickerHTML"
+  "19": "flow.js",
+  "20": "gymPickerHTML",
+  "21": "sheet.js",
+  "22": "Ritmo – note per l'assistente",
+  "23": "ai.js",
+  "24": "weekMenu"
 }

@@ -865,7 +865,7 @@ function viewFood() {
       <section class="card meal">
         <div class="row between"><span class="kicker">${m.label}${m.swapped ? ' · scelta da te' : ''}</span><span class="small muted">${fmt(m.kcal)} kcal · ${m.protein} g prot.</span></div>
         <h3>${esc(m.name)}</h3>
-        ${m.items.length ? `<ul class="portions ${other ? 'two' : ''}">${other ? `<li class="ph"><span></span><b>Tu</b><b>${esc(pn)}</b></li>` : ''}${m.items.map((i) => `<li class="${i.plus ? 'plus' : ''}"><span>${i.plus ? '+ ' : ''}${esc(i.name)}${i.stima ? ' *' : ''}</span><b>${esc(i.label)}</b>${other ? `<b>${esc(other.get(i.food + (i.plus ? '+' : ''))?.label || '–')}</b>` : ''}</li>`).join('')}${other ? m.partner.items.filter((i) => i.plus && !m.items.some((x) => x.plus && x.food === i.food)).map((i) => `<li class="plus"><span>+ ${esc(i.name)}</span><b>–</b><b>${esc(i.label)}</b></li>`).join('') : ''}</ul>` : ''}
+        ${m.items.length ? `<ul class="portions ${other ? 'two' : ''}">${other ? `<li class="ph"><span></span><b>Tu</b><b>${esc(pn)}</b></li>` : ''}${m.items.map((i) => `<li class="${i.plus ? 'plus' : ''}"><span>${i.plus ? '+ ' : ''}${esc(i.name)}${i.stima ? ' *' : ''}</span><b>${esc(other ? i.label.replace('porzione abbondante', 'abbondante').replace('una porzione', '1 porzione') : i.label)}</b>${other ? `<b>${esc((other.get(i.food + (i.plus ? '+' : ''))?.label || '–').replace('porzione abbondante', 'abbondante').replace('una porzione', '1 porzione'))}</b>` : ''}</li>`).join('')}${other ? m.partner.items.filter((i) => i.plus && !m.items.some((x) => x.plus && x.food === i.food)).map((i) => `<li class="plus"><span>+ ${esc(i.name)}</span><b>–</b><b>${esc(i.label)}</b></li>`).join('') : ''}</ul>` : ''}
         ${m.passi?.length ? `<details class="fold"><summary>Come si prepara</summary><ol class="steps-list">${m.passi.map((x) => `<li>${esc(x)}</li>`).join('')}</ol></details>` : ''}
         ${m.fuori ? `<p class="small muted">${esc(m.nota)}</p>` : ''}
         <div class="meal-actions">
@@ -1574,8 +1574,11 @@ function viewCouple() {
   const plan = getPlan();
   const tog = weekTogether(plan.schedule, P);
   const ti = weekdayIndex(new Date());
-  const best = bestTogetherDay(tog, ti);
-  const ws = addDays(new Date(), -weekdayIndex(new Date()));
+  // il giorno migliore da oggi in avanti; se questa settimana non ce n'è più, la prossima
+  let best = bestTogetherDay(tog, ti);
+  const nextWeek = !best;
+  if (!best) best = bestTogetherDay(tog, 0);
+  const ws = addDays(new Date(), -weekdayIndex(new Date()) + (nextWeek ? 7 : 0));
   const me = partnerStats();
   const stale = daysBetween(fromISO(P.at), new Date());
   const coupleSet = (i) => state.log[toISO(addDays(ws, i))]?.couple;
@@ -1593,12 +1596,12 @@ function viewCouple() {
   <section class="card ${R(2)}">
     ${tog.map((d) => `<div class="together ${d.weekday === ti ? 'is-today' : ''}"><span class="day-label">${d.label}</span>
       <span class="grow"><span class="small"><b>Tu</b> ${d.me ? `${esc(d.me.title)} · ${d.me.minutes}′` : 'riposo'}</span><span class="small muted"><b>${esc(P.nome || 'Partner')}</b> ${d.them ? `${esc(d.them.title)} · ${d.them.minutes}′` : 'riposo'}</span></span>
-      ${d.me && d.them && d.weekday >= ti ? (coupleSet(d.weekday) ? '<span class="chip ok">Insieme</span>' : '') : ''}</div>`).join('')}
+      ${d.me && d.them && coupleSet(d.weekday) ? '<span class="chip ok">Insieme</span>' : ''}</div>`).join('')}
   </section>
   ${best ? `<section class="card ${R(3)}" style="margin-top:12px">
-    <h3>Allenatevi insieme ${WDL[best.weekday]}</h3>
+    <h3>Allenatevi insieme ${WDL[best.weekday]}${nextWeek ? ' prossimo' : ''}</h3>
     <p class="small muted">Vi allenate entrambi${best.me.luogo && best.me.luogo === best.them.luogo ? `, tutti e due ${LUOGO_LABEL[best.me.luogo].toLowerCase()}` : ''}. Preparo una sessione da ${best.me.minutes} minuti con esercizi adatti a entrambi, ognuno con la sua dose.</p>
-    ${coupleSet(best.weekday) ? `<button class="btn soft wide" style="margin-top:12px" data-action="couple-day" data-day="${best.weekday}" data-on="0">Torna al mio allenamento</button>` : `<button class="btn primary wide" style="margin-top:12px" data-action="couple-day" data-day="${best.weekday}" data-on="1">Sì, alleniamoci insieme</button>`}
+    ${coupleSet(best.weekday) ? `<button class="btn soft wide" style="margin-top:12px" data-action="couple-day" data-day="${best.weekday + (nextWeek ? 7 : 0)}" data-on="0">Torna al mio allenamento</button>` : `<button class="btn primary wide" style="margin-top:12px" data-action="couple-day" data-day="${best.weekday + (nextWeek ? 7 : 0)}" data-on="1">Sì, alleniamoci insieme</button>`}
   </section>` : ''}
 
   <div class="section-title"><h2>A tavola insieme</h2></div>

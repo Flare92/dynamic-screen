@@ -48,6 +48,11 @@ export function dayOptions(week, today, a) {
       const m = Math.max(10, Math.floor(a.tempo / 5) * 5);
       add({ id: 'corta', title: `Versione corta da ${m} minuti`, text: `Stesso tipo di allenamento, ricostruito sul tempo che hai. Meglio ${m} minuti oggi che saltare.`, minutes: m, apply: [patch(t.iso, { short: m })], score: tired ? 55 : 70 });
     }
+    // 2b) stanco ma con tempo: versione leggera, più breve
+    if (tired && !a.dolore && a.tempo >= S.minutes * 0.85 && S.minutes >= 20) {
+      const m = Math.max(10, Math.round((S.minutes * 0.6) / 5) * 5);
+      add({ id: 'leggera', title: `Versione leggera da ${m} minuti`, text: 'Meno esercizi e meno serie: ti muovi, mantieni l’abitudine e non accumuli fatica.', minutes: m, apply: [patch(t.iso, { short: m })], score: 66 });
+    }
     // 3) scambia con un giorno più avanti che ha una sessione più adatta a oggi
     for (const d of future) {
       const X = sessOf(d);
@@ -79,6 +84,10 @@ export function dayOptions(week, today, a) {
         add({ id: `doppio-${d.weekday}`, title: `Riposa oggi, doppio ${WD[d.weekday]}`, text: `${WD[d.weekday][0].toUpperCase() + WD[d.weekday].slice(1)} fai ${X.title.toLowerCase()} e ${S.title.toLowerCase()}: ${tot} minuti, meglio in due momenti della giornata.`, apply: [patch(t.iso, { sessionFrom: -1 }), patch(d.iso, { extra: effToday })], score: (free.length ? 45 : 62) - (tired ? 0 : 8), day: d.weekday });
         break;
       }
+    }
+    // 6b) saltare oggi: sempre possibile, ma è l'ultima scelta
+    if (!out.some((o) => o.id === 'recupero' || o.id.startsWith('sposta'))) {
+      add({ id: 'salta', title: 'Oggi salto', text: 'Una sessione saltata non cambia i risultati, se domani riparti. Fai almeno una camminata.', apply: [patch(t.iso, { sessionFrom: -1 })], score: tired ? 35 : 20 });
     }
     // 6) recupero attivo
     if (a.dolore || (a.energia === 'bassa' && a.sonno === 'poco')) {
