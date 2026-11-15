@@ -1797,8 +1797,9 @@ document.addEventListener('click', (e) => {
     case 'story-analyze': analyzeStory(t); break;
     case 'ai-save': {
       const P = PROVIDERS[t.dataset.p];
-      const v = document.getElementById('ai-key').value.trim();
-      if (!P.keyRe.test(v)) { toast(`La chiave di ${P.label} inizia con ${t.dataset.p === 'gemini' ? 'AIza' : 'sk-ant-'}`); return; }
+      // via spazi, a capo e virgolette che a volte si copiano insieme alla chiave
+      const v = document.getElementById('ai-key').value.replace(/[\s"'`]/g, '');
+      if (!P.keyRe.test(v)) { toast('La chiave sembra incompleta: copiala di nuovo per intero'); return; }
       setAiKey(t.dataset.p, v); toast(`${P.label} attivo`); rerender();
       break;
     }

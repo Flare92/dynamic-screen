@@ -6,8 +6,8 @@
 import { FOOD_IDS, foodMacros, foodLabel } from './diet.js';
 
 export const PROVIDERS = {
-  gemini: { label: 'Gemini 3.8 Flash', by: 'Google', free: true, keyUrl: 'https://aistudio.google.com/apikey', keyHint: 'Incolla la chiave (AIza…)', keyRe: /^AIza[\w-]{20,}$/ },
-  claude: { label: 'Claude', by: 'Anthropic', free: false, keyUrl: 'https://console.anthropic.com/settings/keys', keyHint: 'Incolla la chiave (sk-ant-…)', keyRe: /^sk-ant-/ },
+  gemini: { label: 'Gemini 3.8 Flash', by: 'Google', free: true, keyUrl: 'https://aistudio.google.com/apikey', keyHint: 'Incolla qui la chiave', keyRe: /^\S{20,}$/ },
+  claude: { label: 'Claude', by: 'Anthropic', free: false, keyUrl: 'https://console.anthropic.com/settings/keys', keyHint: 'Incolla qui la chiave (sk-ant-…)', keyRe: /^\S{20,}$/ },
 };
 const KEY_STORE = { gemini: 'ritmo.geminikey', claude: 'ritmo.aikey' };
 const PROV_STORE = 'ritmo.aiprov';

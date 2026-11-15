@@ -55,3 +55,10 @@ test('ricette con Gemini: valori ricalcolati sulla tabella per gli alimenti noti
   assert.equal(r.protein, Math.round(7.5 * 0.8 + 23 * 1.5 + 2.4));
   assert.ok(r.items[2].stima && !r.items[0].stima);
 });
+
+test('chiavi: qualsiasi formato di Google, purché completo', async () => {
+  const { PROVIDERS } = await import('../js/ai.js');
+  for (const k of ['AIzaSyA1234567890abcdefghijklmnop', 'AQ.Ab8RN6Kx1234567890abcdefghijk', 'gk-1234567890abcdefghijklmn']) assert.ok(PROVIDERS.gemini.keyRe.test(k), k);
+  assert.ok(!PROVIDERS.gemini.keyRe.test('AIza123'));
+  assert.ok(!PROVIDERS.gemini.keyRe.test(''));
+});
