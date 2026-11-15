@@ -20,9 +20,9 @@ Mappa rapida dei moduli (comunità del grafo):
 - `js/diet.js` – tipi di dieta, `weekMenu`, `coupleMenu` (menu di coppia), `pantryRecipes` (ricette dalla dispensa), `shoppingList`
 - `js/giornata.js` – giornata flessibile: `dayOptions`, `applyOption`, `undoOption` (log: sessionFrom -1 = riposo, extra = doppio, short = versione corta)
 - `js/coppia.js` – codice di coppia senza server: `buildCard`, `encodeCard`/`decodeCard`, `weekTogether`, `bestTogetherDay`
-- `js/ai.js` – Claude con la chiave dell'utente: `aiRicette`, `aiGiornata` (sceglie solo tra le opzioni calcolate)
+- `js/ai.js` – AI con la chiave dell'utente, Gemini 3.8 Flash (predefinito, gratuito, REST) o Claude: `ask`, `aiConfig`, `aiRicette`, `aiGiornata`
 - `js/exercises.js`, `js/guide.js`, `js/guide-extra.js` – esercizi e guide tecniche
 - `js/demos.js`, `js/demo.js` – foto reali degli esercizi (`media/ex/`), riquadro animato e miniature
 - `js/sheet.js`, `js/player.js`, `js/fx.js` – scheda esercizio, allenamento guidato, effetti
-- Test: `npm test` (node --test, 57 test)
+- Test: `npm test` (node --test, 61 test)
 - Dopo ogni rilascio: aggiorna `VERSION` in `sw.js`

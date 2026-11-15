@@ -1,5 +1,5 @@
 // Relazione iniziale: domande guida, analisi del testo libero (offline, regole per l'italiano)
-// e analisi avanzata facoltativa con Claude (chiave API dell'utente, chiamata dal browser).
+// e analisi avanzata facoltativa con l'AI (Gemini o Claude, chiave API dell'utente, chiamata dal browser).
 
 export const QUESTIONS = [
   { id: 'chi', label: 'Chi sei', hint: 'Età, sesso, altezza, peso.', keys: ['eta', 'sesso', 'altezza', 'peso'] },
@@ -268,7 +268,7 @@ export function slotsFromSessions(sessioni) {
 }
 
 // ------------------------------------------------------------------
-// Analisi avanzata con Claude (facoltativa)
+// Analisi avanzata con l'AI (facoltativa)
 // ------------------------------------------------------------------
 
 const SCHEMA = {
@@ -323,25 +323,14 @@ Regole:
 - "dieta": latto = vegetale più latticini senza uova; latto-ovo = vegetariana con uova; flessitariana = prevalentemente vegetale con un po' di carne.
 - Data di riferimento per le scadenze: {{OGGI}}.`;
 
-export async function analyzeWithClaude(text, apiKey) {
-  const { Anthropic, betaJSONSchemaOutputFormat } = await import('../vendor/anthropic-sdk.js');
-  const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true, maxRetries: 1, timeout: 90_000 });
+/** analisi avanzata del racconto con il motore AI scelto (Gemini o Claude) */
+export async function analyzeWithAI(text, cfg) {
+  const { ask } = await import('./ai.js');
   const today = new Date().toISOString().slice(0, 10);
-  const response = await client.beta.messages.parse({
-    model: 'claude-opus-5-5',
-    max_tokens: 16000,
-    betas: ['server-side-fallback-2026-07-01'],
-    fallbacks: 'default',
-    output_config: { effort: 'low', format: betaJSONSchemaOutputFormat(SCHEMA) },
-    system: SYSTEM.replace('{{OGGI}}', today),
-    messages: [{ role: 'user', content: `Relazione del cliente:\n\n${text}` }],
-  });
-  if (response.stop_reason === 'refusal') throw new Error('Claude non ha potuto analizzare il testo.');
-  if (response.stop_reason === 'max_tokens' || !response.parsed_output) throw new Error('Risposta incompleta, riprova.');
-  return response.parsed_output;
+  return ask(cfg, { system: SYSTEM.replace('{{OGGI}}', today), user: `Relazione del cliente:\n\n${text}`, schema: SCHEMA, maxTokens: 16000 });
 }
 
-/** unisce il risultato di Claude (prioritario) con l'analisi offline */
+/** unisce il risultato dell'AI (prioritario) con l'analisi offline */
 export function mergeAI(local, ai) {
   const p = { ...local.profile };
   const found = { ...local.found };

@@ -14,10 +14,10 @@ import {
   PAIN_REGIONS, AREAS, LEVEL_LABEL, TEST_BY_ID,
   computeProfile, precision, buildKpis, metric, kpiProgress,
 } from './assessment.js';
-import { QUESTIONS, EXAMPLE, parseNarrative, coverage, analyzeWithClaude, mergeAI } from './narrative.js';
+import { QUESTIONS, EXAMPLE, parseNarrative, coverage, analyzeWithAI, mergeAI } from './narrative.js';
 import { DIET_LABEL, DISPENSA, pantryRecipes, coupleMenu, foodLabel } from './diet.js';
 import { dayOptions, applyOption, undoOption } from './giornata.js';
-import { aiRicette, aiGiornata, aiError } from './ai.js';
+import { aiRicette, aiGiornata, aiError, aiConfig, aiProvider, setAiProvider, setAiKey, hasAiKey, PROVIDERS } from './ai.js';
 import { buildCard, encodeCard, decodeCard, shareUrl, weekTogether, bestTogetherDay } from './coppia.js';
 import { parseGymList, reviewGym, VERDICT_LABEL, VERDICT_COUNT, GYM_PICKS, lineIsPick } from './gymreview.js';
 import { startAssessment, renderAssessment, mountAssessment, handleAssessmentClick, assessmentActive, cancelAssessment } from './assess-ui.js';
@@ -402,22 +402,32 @@ function finishFlow() {
 // ==================================================================
 
 const STORY_KEY = 'ritmo.story';
-const AI_KEY = 'ritmo.aikey';
 let storyResult = null;
 const storyText = () => { try { return localStorage.getItem(STORY_KEY) ?? state.profile?.relazione ?? ''; } catch { return state.profile?.relazione || ''; } };
 const storySave = (v) => { try { localStorage.setItem(STORY_KEY, v); } catch { /* */ } };
-function aiKey(v) {
-  try {
-    if (v === undefined) return localStorage.getItem(AI_KEY);
-    if (v === null) localStorage.removeItem(AI_KEY); else localStorage.setItem(AI_KEY, v);
-  } catch { return null; }
-  return v;
+/** il motore AI attivo ({ provider, key, label }) o null */
+const aiKey = () => aiConfig();
+
+/** scelta del motore AI e della chiave (profilo e racconto) */
+function aiSettings() {
+  const cur = aiProvider();
+  const P = PROVIDERS[cur];
+  const on = hasAiKey(cur);
+  return `
+    <div class="seg" style="margin-top:12px">${Object.entries(PROVIDERS).map(([id, x]) => `<button type="button" data-action="ai-provider" data-p="${id}" class="${id === cur ? 'on' : ''}">${x.label}${x.free ? ' · gratis' : ''}</button>`).join('')}</div>
+    <p class="small muted" style="margin-top:10px">${cur === 'gemini'
+      ? 'Gemini 3.8 Flash di Google ha un piano gratuito: crea la chiave su Google AI Studio con il tuo account Google. Sul piano gratuito Google può usare le richieste per migliorare i suoi prodotti: non scrivere dati che non vuoi condividere.'
+      : 'Claude di Anthropic è a pagamento: ogni richiesta costa pochi centesimi sul tuo account. Crea la chiave sulla console di Anthropic.'}
+      La chiave resta solo su questo telefono e non finisce nelle copie dei dati.</p>
+    ${on ? `<div class="row between" style="margin-top:12px"><span class="chip ok">${P.label} attivo</span><button class="link small" data-action="ai-remove" data-p="${cur}">Rimuovi la chiave</button></div>`
+      : `<div class="row" style="margin-top:12px"><input type="password" id="ai-key" placeholder="${P.keyHint}" autocomplete="off"><button type="button" class="btn soft small" data-action="ai-save" data-p="${cur}">Salva</button></div>
+      <a class="link small" style="display:inline-block;margin-top:10px" href="${P.keyUrl}" target="_blank" rel="noopener">Crea la chiave ${cur === 'gemini' ? 'gratuita su Google AI Studio' : 'su Anthropic'} →</a>`}`;
 }
 
 function viewStory() {
   const text = storyText();
   const cov = coverage(parseNarrative(text));
-  const hasKey = !!aiKey();
+  const hasKey = aiKey();
   const canDictate = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
   return `
   ${subHdr('Raccontami di te', state.profile ? '#/profilo' : '#/benvenuto')}
@@ -433,11 +443,10 @@ function viewStory() {
     </div>
     <button class="link small ${R(4)}" data-action="story-example">Vedi un esempio</button>
     <details class="card fold ${R(5)}">
-      <summary><b>Analisi avanzata con Claude</b><span class="chip ${hasKey ? 'ok' : ''}">${hasKey ? 'Attiva' : 'Facoltativa'}</span></summary>
-      ${hasKey ? `<label class="row small" style="margin-top:10px"><input type="checkbox" id="use-ai" checked> Usa Claude per capire meglio il testo</label>
-        <p class="small muted" style="margin-top:6px">Il testo viene inviato ad Anthropic con la tua chiave. Senza connessione uso l’analisi integrata.</p>`
-        : `<p class="small muted" style="margin-top:8px">L’analisi integrata funziona offline e riconosce le frasi più comuni. Con una tua chiave API di Anthropic, Claude capisce qualsiasi modo di scrivere. La chiave resta solo su questo telefono.</p>
-        <div class="row" style="margin-top:10px"><input type="password" id="ai-key" placeholder="sk-ant-…" autocomplete="off"><button type="button" class="btn soft small" data-action="ai-save">Salva</button></div>`}
+      <summary><b>Analisi avanzata con l’AI</b><span class="chip ${hasKey ? 'ok' : ''}">${hasKey ? `${hasKey.label} attivo` : 'Facoltativa'}</span></summary>
+      ${hasKey ? `<label class="row small" style="margin-top:10px"><input type="checkbox" id="use-ai" checked> Usa ${hasKey.label} per capire meglio il testo</label>
+        <p class="small muted" style="margin-top:6px">Il testo viene inviato a ${hasKey.by} con la tua chiave. Senza connessione uso l’analisi integrata.</p>`
+        : `<p class="small muted" style="margin-top:8px">L’analisi integrata funziona offline e riconosce le frasi più comuni. Con l’AI capisco qualsiasi modo di scrivere.</p>${aiSettings()}`}
     </details>
     <div class="wizard-actions"><button class="btn primary" data-action="story-analyze">Continua</button></div>
   </section>`;
@@ -481,8 +490,8 @@ async function analyzeStory(btn) {
   let result = parseNarrative(text);
   const useAI = document.getElementById('use-ai')?.checked && aiKey();
   if (useAI) {
-    btn.disabled = true; btn.textContent = 'Claude sta leggendo…';
-    try { result = mergeAI(result, await analyzeWithClaude(text, aiKey())); }
+    btn.disabled = true; btn.textContent = `${aiKey().label} sta leggendo…`;
+    try { result = mergeAI(result, await analyzeWithAI(text, aiKey())); }
     catch (e) { toast(`Analisi avanzata non riuscita: uso quella integrata (${e?.status === 401 ? 'chiave non valida' : 'errore di rete'})`); }
     btn.disabled = false; btn.textContent = 'Continua';
   }
@@ -1324,9 +1333,8 @@ function viewProfile() {
 
   <div class="section-title"><h2>Intelligenza artificiale</h2></div>
   <section class="card">
-    <p class="small muted">Con Claude, Ritmo inventa ricette con quello che hai in casa, ti consiglia come cambiare la giornata e capisce il tuo racconto. Serve una tua chiave API di Anthropic: resta solo su questo telefono e non finisce nelle copie dei dati. Senza chiave, tutto funziona lo stesso con i calcoli integrati.</p>
-    ${aiKey() ? '<div class="row between" style="margin-top:12px"><span class="chip ok">Attiva</span><button class="link small" data-action="ai-remove">Rimuovi la chiave</button></div>'
-      : '<div class="row" style="margin-top:12px"><input type="password" id="ai-key" placeholder="sk-ant-…" autocomplete="off"><button type="button" class="btn soft small" data-action="ai-save">Salva</button></div>'}
+    <p class="small muted">Con l’AI, Ritmo inventa ricette con quello che hai in casa, ti consiglia come cambiare la giornata e capisce il tuo racconto. Senza chiave tutto funziona lo stesso con i calcoli integrati.</p>
+    ${aiSettings()}
   </section>
 
   ${!standalone ? `
@@ -1401,7 +1409,7 @@ function viewDay() {
 
   <div class="section-title"><h2>Chiedi al coach AI</h2></div>
   <section class="card">
-    <p class="small muted">Raccontami la tua giornata con parole tue: Claude sceglie tra queste opzioni e ti spiega perché.</p>
+    <p class="small muted">Raccontami la tua giornata con parole tue: l’AI sceglie tra queste opzioni e ti spiega perché.</p>
     <textarea id="day-note" style="margin-top:10px" placeholder="Es. stasera ho una cena fuori e domani mi alzo presto">${esc(f.nota)}</textarea>
     ${aiKey() ? `<button class="btn soft wide" style="margin-top:10px" data-action="day-ai" ${dayAI?.loading ? 'disabled' : ''}>${dayAI?.loading ? 'Il coach sta pensando…' : '✨ Chiedi al coach AI'}</button>` : '<a class="btn soft wide" style="margin-top:10px" href="#/profilo">Attiva l’AI nel profilo</a>'}
     ${dayAI?.error ? `<p class="error" style="margin-top:10px">${esc(dayAI.error)}</p>` : ''}
@@ -1788,12 +1796,14 @@ document.addEventListener('click', (e) => {
     case 'story-mic': toggleDictation(t); break;
     case 'story-analyze': analyzeStory(t); break;
     case 'ai-save': {
+      const P = PROVIDERS[t.dataset.p];
       const v = document.getElementById('ai-key').value.trim();
-      if (!/^sk-ant-/.test(v)) { toast('La chiave deve iniziare con sk-ant-'); return; }
-      aiKey(v); toast('Chiave salvata su questo telefono'); rerender();
+      if (!P.keyRe.test(v)) { toast(`La chiave di ${P.label} inizia con ${t.dataset.p === 'gemini' ? 'AIza' : 'sk-ant-'}`); return; }
+      setAiKey(t.dataset.p, v); toast(`${P.label} attivo`); rerender();
       break;
     }
-    case 'ai-remove': aiKey(null); toast('Chiave rimossa'); rerender(); break;
+    case 'ai-remove': setAiKey(t.dataset.p, null); toast('Chiave rimossa'); rerender(); break;
+    case 'ai-provider': setAiProvider(t.dataset.p); rerender(); break;
     case 'pick-day': selectedDay = Number(t.dataset.day); showFeedback = false; rerender(); break;
     case 'open-menu': menuDay = Number(t.dataset.day); break;
     case 'menu-day': menuDay = Number(t.dataset.day); rerender(); break;
