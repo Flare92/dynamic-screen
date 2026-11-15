@@ -30,6 +30,8 @@ import { demoFor } from './demos.js';
 // Stato (salvato solo sul dispositivo)
 // ==================================================================
 
+// versione mostrata nel profilo: aggiornala insieme a VERSION in sw.js
+const APP_VERSION = 'v13';
 const KEY = 'ritmo.v1';
 const empty = () => ({ profile: null, planStart: null, calorieAdjust: 0, log: {}, weights: [], assess: [], swaps: {}, excluded: [], exAdj: {}, fbCount: 0 });
 
@@ -1356,7 +1358,7 @@ function viewProfile() {
     <button class="btn line wide" data-action="restart-plan">Ricomincia il piano da oggi</button>
     <button class="btn danger wide" data-action="reset">Cancella tutti i dati</button>
   </section>
-  <p class="disclaimer">Ritmo non è un dispositivo medico e non sostituisce il parere di un professionista.<br>Foto degli esercizi: free-exercise-db, pubblico dominio.</p>`;
+  <p class="disclaimer">Ritmo ${APP_VERSION} · Non è un dispositivo medico e non sostituisce il parere di un professionista.<br>Foto degli esercizi: free-exercise-db, pubblico dominio.</p>`;
 }
 
 // ==================================================================
@@ -1799,7 +1801,8 @@ document.addEventListener('click', (e) => {
       const P = PROVIDERS[t.dataset.p];
       // via spazi, a capo e virgolette che a volte si copiano insieme alla chiave
       const v = document.getElementById('ai-key').value.replace(/[\s"'`]/g, '');
-      if (!P.keyRe.test(v)) { toast('La chiave sembra incompleta: copiala di nuovo per intero'); return; }
+      // controllo minimo qui (non nel modulo AI): la validità vera la verifica il servizio alla prima richiesta
+      if (v.length < 20) { toast('La chiave sembra incompleta: copiala di nuovo per intero'); return; }
       setAiKey(t.dataset.p, v); toast(`${P.label} attivo`); rerender();
       break;
     }
