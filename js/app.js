@@ -3,7 +3,7 @@
 import {
   CONDITIONS, GOALS, EQUIPMENT, WEEKDAYS, WEEKDAYS_LONG, TYPE_KIND,
   generatePlan, analyzeProgress, expectedWeight, buildSession, derive, allowedExercises, alternativesFor,
-  toISO, fromISO, addDays, daysBetween, weekdayIndex, formatDate,
+  toISO, fromISO, addDays, daysBetween, weekdayIndex, formatDate, resizeSession, coupleSession,
 } from './engine.js';
 import { EXERCISES } from './exercises.js';
 import { guideFor, MUSCLE_LABELS } from './guide.js';
@@ -15,7 +15,10 @@ import {
   computeProfile, precision, buildKpis, metric, kpiProgress,
 } from './assessment.js';
 import { QUESTIONS, EXAMPLE, parseNarrative, coverage, analyzeWithClaude, mergeAI } from './narrative.js';
-import { DIET_LABEL } from './diet.js';
+import { DIET_LABEL, DISPENSA, pantryRecipes, coupleMenu, foodLabel } from './diet.js';
+import { dayOptions, applyOption, undoOption } from './giornata.js';
+import { aiRicette, aiGiornata, aiError } from './ai.js';
+import { buildCard, encodeCard, decodeCard, shareUrl, weekTogether, bestTogetherDay } from './coppia.js';
 import { parseGymList, reviewGym, VERDICT_LABEL, VERDICT_COUNT, GYM_PICKS, lineIsPick } from './gymreview.js';
 import { startAssessment, renderAssessment, mountAssessment, handleAssessmentClick, assessmentActive, cancelAssessment } from './assess-ui.js';
 import { SOGNI, ZONE_LABEL, goalFromSogni } from './indagine.js';
@@ -100,10 +103,26 @@ function dayLog(iso) {
   if (!state.log[iso]) state.log[iso] = { done: false, items: [], habits: {} };
   return state.log[iso];
 }
+/**
+ * La sessione davvero prevista in un giorno, con le modifiche della giornata flessibile:
+ * sessionFrom (-1 = riposo), short (versione corta), extra (doppio), couple (allenamento di coppia).
+ */
 function sessionFor(plan, iso) {
-  const from = state.log[iso]?.sessionFrom;
+  const lg = state.log[iso] || {};
+  const from = lg.sessionFrom;
   const wd = from ?? weekdayIndex(fromISO(iso));
-  return { session: plan.schedule[wd].session, moved: from !== undefined && from !== null };
+  let session = wd >= 0 ? plan.schedule[wd].session : null;
+  if (session && lg.couple && state.partner) session = coupleSession(state.profile, planCtx(), state.partner, session.minutes, session.luogo || 'casa', plan.week);
+  else if (session && lg.short && lg.short < session.minutes) session = resizeSession(state.profile, planCtx(), session, lg.short, plan.week);
+  const extra = lg.extra !== undefined && lg.extra !== null && lg.extra >= 0 ? plan.schedule[lg.extra].session : null;
+  return { session, moved: from !== undefined && from !== null && from >= 0, rested: from === -1, recupero: !!lg.recupero, extra };
+}
+/** il registro di una sessione: quella principale o la seconda del giorno (doppio) */
+function partLog(iso, which) {
+  const lg = dayLog(iso);
+  if (which !== 'x') return lg;
+  if (!lg.x) lg.x = { done: false, items: [] };
+  return lg.x;
 }
 
 // domande dell'indagine a cui un profilo (anche creato con una versione precedente) non ha ancora risposto
@@ -129,11 +148,15 @@ $tabbar.innerHTML = TABS.map(([id, l]) => `<a href="#/${id}" data-tab="${id}">${
 
 const ALIAS = { piano: 'allenamento', setup: 'inizio', capito: 'perche', alimentazione: 'cibo' };
 const NO_PROFILE = ['benvenuto', 'inizio', 'racconto'];
-const NO_TABS = ['benvenuto', 'inizio', 'racconto', 'valutazione', 'palestra', 'perche', 'partenza', 'esercizi', 'profilo'];
-const TAB_OF = { partenza: 'progressi', esercizi: 'allenamento', palestra: 'allenamento', perche: 'allenamento' };
+const NO_TABS = ['benvenuto', 'inizio', 'racconto', 'valutazione', 'palestra', 'perche', 'partenza', 'esercizi', 'profilo', 'giornata', 'ricetta', 'coppia'];
+const TAB_OF = { partenza: 'progressi', esercizi: 'allenamento', palestra: 'allenamento', perche: 'allenamento', giornata: 'oggi', ricetta: 'cibo', coppia: 'oggi' };
 
+let routeQuery = new URLSearchParams();
 function route() {
   let hash = location.hash.replace('#/', '') || 'oggi';
+  [hash, routeQuery] = [hash.split('?')[0], new URLSearchParams(hash.split('?')[1] || '')];
+  // un codice di coppia ricevuto prima di avere un profilo resta in attesa
+  if (hash === 'coppia' && routeQuery.get('c') && !state.profile) { try { localStorage.setItem('ritmo.pendingPartner', routeQuery.get('c')); } catch { /* */ } toast('Prima crea il tuo profilo: poi ti collego'); }
   hash = ALIAS[hash] || hash;
   if (!state.profile && !NO_PROFILE.includes(hash)) { location.replace('#/benvenuto'); hash = 'benvenuto'; }
   const page = state.profile && hash === 'benvenuto' ? 'oggi' : hash;
@@ -145,13 +168,14 @@ function route() {
   $tabbar.querySelectorAll('a').forEach((a) => a.classList.toggle('on', a.dataset.tab === (TAB_OF[page] || page)));
 
   if (page === 'inizio' && !draft) startFlow(!!state.profile);
-  const views = { benvenuto: viewWelcome, inizio: viewFlow, oggi: viewToday, allenamento: viewTraining, cibo: viewFood, esercizi: viewLibrary, progressi: viewProgress, profilo: viewProfile, valutazione: renderAssessment, partenza: viewStart, racconto: viewStory, perche: viewWhy, palestra: viewGym };
+  const views = { benvenuto: viewWelcome, inizio: viewFlow, oggi: viewToday, allenamento: viewTraining, cibo: viewFood, esercizi: viewLibrary, progressi: viewProgress, profilo: viewProfile, valutazione: renderAssessment, partenza: viewStart, racconto: viewStory, perche: viewWhy, palestra: viewGym, giornata: viewDay, ricetta: viewRecipe, coppia: viewCouple };
   $app.innerHTML = (views[page] || viewToday)();
   $app.dataset.page = page;
   if (page === 'inizio') bindFlowInputs();
   if (page === 'valutazione') mountAssessment();
   if (page === 'racconto') bindStory();
   if (page === 'palestra') bindGym();
+  if (page === 'coppia') mountCouple();
   countUp($app);
 }
 
@@ -520,7 +544,7 @@ function viewToday() {
   const isToday = iso === today();
   const week = Math.max(1, Math.floor(daysBetween(fromISO(state.planStart), viewDate) / 7) + 1);
   const plan = getPlan(week);
-  const { session, moved } = sessionFor(plan, iso);
+  const { session, moved, rested, recupero, extra } = sessionFor(plan, iso);
   const lg = state.log[iso] || { done: false, items: [], habits: {} };
   const stops = plan.alerts.filter((a) => a.level === 'stop');
   const lastW = [...state.weights].sort((a, b) => a.date.localeCompare(b.date)).pop();
@@ -531,7 +555,8 @@ function viewToday() {
   const movedDone = new Set();
   for (let i = 0; i < 7; i++) {
     const l = state.log[toISO(addDays(weekStart, i))];
-    if (l?.done && l.sessionFrom !== undefined && l.sessionFrom !== null) movedDone.add(l.sessionFrom);
+    if (l?.done && l.sessionFrom !== undefined && l.sessionFrom !== null && l.sessionFrom >= 0) movedDone.add(l.sessionFrom);
+    if (l?.x?.done && l.extra >= 0) movedDone.add(l.extra);
   }
   const strip = WEEKDAYS.map((l, i) => {
     const d = addDays(weekStart, i);
@@ -549,7 +574,11 @@ function viewToday() {
   <div class="stack">
     ${isToday ? coach(esc(coachToday(plan, session, lg, an)), R(2)) : ''}
     ${stops.length ? `<a href="#/perche" class="alert stop ${R(2)}"><span>⚠️</span><span><b>Prima di iniziare:</b> ${esc(stops[0].text)}${stops.length > 1 ? ` (+${stops.length - 1})` : ''}</span></a>` : ''}
-    ${session ? sessionCard(session, iso, lg, moved) : restCard(plan, iso, lg)}
+    ${isToday ? changedCard() : ''}
+    ${session ? sessionCard(session, iso, lg, moved) : restCard(plan, iso, lg, { rested, recupero })}
+    ${extra ? sessionCard(extra, iso, lg.x || { done: false, items: [] }, true, 'x') : ''}
+    ${isToday && !lg.done ? `<a class="card step-card ${R(3)}" href="#/giornata"><span class="step-ico">🔀</span><div><b>Com’è la tua giornata?</b><p class="small muted">Poco tempo, stanchezza, imprevisti: ti propongo come cambiare la settimana.</p></div>${ICON.next}</a>` : ''}
+    ${isToday ? partnerTodayCard(plan, selectedDay) : ''}
     ${isToday ? nextStepCard() : ''}
     ${mealsCard(plan, selectedDay)}
     ${isToday ? habitsCard(plan, iso) : ''}
@@ -563,7 +592,7 @@ function viewToday() {
 }
 
 /** elenco degli esercizi di una sessione, con miniatura */
-function exList(s, iso, lg, { check = false, swap = false } = {}) {
+function exList(s, iso, lg, { check = false, swap = false, which = '' } = {}) {
   const doneItems = new Set(lg?.items || []);
   return s.blocks.map((b, bi) => `
     <div class="block">
@@ -572,19 +601,20 @@ function exList(s, iso, lg, { check = false, swap = false } = {}) {
       ${b.items.map((it, ii) => {
         const key = `${bi}:${ii}`;
         const on = doneItems.has(key) || lg?.done;
+        const pd = it.partnerDose ? `<span class="ex-basis">${esc(state.partner?.nome || 'Partner')}: ${esc(it.partnerDose)}</span>` : '';
         return `<div class="ex ${on ? 'done' : ''}">
           <button class="ex-main" data-action="open-ex" data-id="${it.id}" data-dose="${esc(it.dose)}" ${swap ? 'data-swap="1"' : ''}>
             ${thumbHTML(it.id)}
             <span class="ex-body"><span class="ex-name">${esc(it.name)}</span><span class="ex-dose">${esc(it.dose)}</span>
-            ${it.tag ? `<span class="tag">${esc(it.tag)}</span>` : ''}${it.basis ? `<span class="ex-basis">${esc(it.basis)}</span>` : ''}</span>
+            ${it.tag ? `<span class="tag">${esc(it.tag)}</span>` : ''}${it.basis ? `<span class="ex-basis">${esc(it.basis)}</span>` : ''}${pd}</span>
           </button>
-          ${check ? `<button class="check ${on ? 'on' : ''}" data-action="toggle-item" data-key="${key}" data-iso="${iso}" aria-label="Fatto">✓</button>` : ''}
+          ${check ? `<button class="check ${on ? 'on' : ''}" data-action="toggle-item" data-key="${key}" data-iso="${iso}" data-which="${which}" aria-label="Fatto">✓</button>` : ''}
         </div>`;
       }).join('')}
     </div>`).join('');
 }
 
-function sessionCard(s, iso, lg, moved) {
+function sessionCard(s, iso, lg, moved, which = '') {
   const future = fromISO(iso) > fromISO(today()) || fromISO(iso) < fromISO(state.planStart);
   const ids = sessionIds(s);
   const total = ids.length;
@@ -593,16 +623,16 @@ function sessionCard(s, iso, lg, moved) {
   let footer = '';
   if (lg.done) {
     footer = `<div class="alert ok"><span>✓</span><span><b>Allenamento completato.</b>${lg.feedback ? ` L’hai trovato ${lg.feedback}.` : ''}</span></div>
-      <button class="link small" data-action="undo-done" data-iso="${iso}">Annulla</button>`;
+      <button class="link small" data-action="undo-done" data-iso="${iso}" data-which="${which}">Annulla</button>`;
   } else if (!future) {
-    footer = showFeedback
+    footer = showFeedback === (which || 'main')
       ? `<p class="fb-q">Com’è andata?</p>
          <div class="feedback">
-           <button data-action="done" data-iso="${iso}" data-fb="facile"><span>😌</span>Facile</button>
-           <button data-action="done" data-iso="${iso}" data-fb="giusto"><span>💪</span>Giusto</button>
-           <button data-action="done" data-iso="${iso}" data-fb="duro"><span>🥵</span>Duro</button>
+           <button data-action="done" data-iso="${iso}" data-which="${which}" data-fb="facile"><span>😌</span>Facile</button>
+           <button data-action="done" data-iso="${iso}" data-which="${which}" data-fb="giusto"><span>💪</span>Giusto</button>
+           <button data-action="done" data-iso="${iso}" data-which="${which}" data-fb="duro"><span>🥵</span>Duro</button>
          </div>`
-      : '<button class="link small" data-action="ask-feedback">L’ho già fatto per conto mio</button>';
+      : `<button class="link small" data-action="ask-feedback" data-which="${which}">L’ho già fatto per conto mio</button>`;
   }
   return `
   <article class="card session ${lg.done ? 'is-done' : ''} ${R(3)}">
@@ -610,18 +640,19 @@ function sessionCard(s, iso, lg, moved) {
     <div class="session-body">
       <div class="meta"><span class="chip accent">${KIND_LABEL[s.kind] || 'Allenamento'}</span><span class="chip">${s.minutes} min</span>${s.luogo ? `<span class="chip">${LUOGO_LABEL[s.luogo]}</span>` : ''}</div>
       <h2>${esc(s.title)}</h2>
-      <p class="small muted">${total} esercizi${nDone && !lg.done ? ` · ${nDone} già fatti` : ''}${moved ? ' · spostato a oggi' : ''}</p>
-      ${!future && !lg.done ? `<button class="btn primary wide" data-action="play" data-iso="${iso}">${ICON.play} ${nDone ? 'Riprendi l’allenamento' : 'Inizia l’allenamento'}</button>` : ''}
+      <p class="small muted">${which ? 'Seconda sessione di oggi · ' : ''}${total} esercizi${nDone && !lg.done ? ` · ${nDone} già fatti` : ''}${moved && !which ? ' · spostato a oggi' : ''}</p>
+      ${s.couple ? `<p class="small couple-note">Esercizi adatti a entrambi. Sotto ogni esercizio trovi anche la dose di ${esc(state.partner?.nome || 'chi si allena con te')}.</p>` : ''}
+      ${!future && !lg.done ? `<button class="btn primary wide" data-action="play" data-iso="${iso}" data-which="${which}">${ICON.play} ${nDone ? 'Riprendi l’allenamento' : 'Inizia l’allenamento'}</button>` : ''}
       <details class="fold" ${lg.done || future ? '' : ''}>
         <summary>Guarda gli esercizi</summary>
-        ${exList(s, iso, lg, { check: !future, swap: true })}
+        ${exList(s, iso, lg, { check: !future, swap: !s.couple && !s.resized, which })}
       </details>
       ${footer}
     </div>
   </article>`;
 }
 
-function restCard(plan, iso, lg) {
+function restCard(plan, iso, lg, { rested = false, recupero = false } = {}) {
   const p = state.profile;
   const d = derive(p);
   const steps = plan.habits.find((h) => h.key === 'passi');
@@ -640,14 +671,14 @@ function restCard(plan, iso, lg) {
   return `
   <article class="card session rest ${R(3)}">
     <div class="session-body">
-      <div class="meta"><span class="chip">Recupero</span></div>
-      <h2>Giorno di riposo</h2>
-      <p class="small muted">Il corpo si rinforza quando recupera. Muoviti comunque in modo leggero.</p>
+      <div class="meta"><span class="chip">${recupero ? 'Recupero attivo' : 'Recupero'}</span></div>
+      <h2>${recupero ? 'Oggi recupero attivo' : rested ? 'Oggi riposi' : 'Giorno di riposo'}</h2>
+      <p class="small muted">${recupero ? 'Una camminata e 15 minuti di mobilità: muoviti senza caricare.' : rested ? 'Hai spostato l’allenamento di oggi: goditi la pausa.' : 'Il corpo si rinforza quando recupera. Muoviti comunque in modo leggero.'}</p>
       <div class="ex"><button class="ex-main" data-action="open-ex" data-id="x_cammino">${thumbHTML('x_cammino')}<span class="ex-body"><span class="ex-name">Una camminata</span><span class="ex-dose">20–30 minuti · ${steps ? steps.target.toLocaleString('it-IT') : '8.000'} passi nella giornata</span></span></button></div>
-      <details class="fold"><summary>Se vuoi, 5 minuti di allungamento</summary>
+      <details class="fold" ${recupero ? 'open' : ''}><summary>${recupero ? 'La tua mobilità di oggi' : 'Se vuoi, 5 minuti di allungamento'}</summary>
         ${items.map((it) => `<div class="ex"><button class="ex-main" data-action="open-ex" data-id="${it.id}">${thumbHTML(it.id)}<span class="ex-body"><span class="ex-name">${esc(it.name)}</span><span class="ex-dose">${esc(it.dose)}</span></span></button></div>`).join('')}
       </details>
-      ${canMove && missed.length && !lg.done ? `
+      ${canMove && missed.length && !lg.done && !rested ? `
         <p class="fb-q">${isStart ? 'Vuoi iniziare subito?' : 'Hai saltato un allenamento?'}</p>
         <p class="small muted">${isStart ? 'Puoi fare oggi il primo:' : 'Puoi recuperarlo oggi:'}</p>
         <div class="chips">${missed.map((m) => `<button data-action="move-session" data-from="${m.weekday}" data-iso="${iso}">${esc(m.session.title)} · ${m.session.minutes} min</button>`).join('')}</div>` : ''}
@@ -657,7 +688,7 @@ function restCard(plan, iso, lg) {
 
 /** i pasti del giorno, in breve */
 function mealsCard(plan, wd) {
-  const day = plan.nutrition.menu?.days[wd];
+  const day = currentMenu(plan).days[wd];
   if (!day?.meals.length) return '';
   return `
   <a class="card meals-card ${R(4)}" href="#/cibo" data-action="open-menu" data-day="${wd}">
@@ -779,12 +810,29 @@ function viewWhy() {
 // Alimentazione
 // ==================================================================
 
+/** il menu della settimana: personale o di coppia, con i piatti cambiati dalla persona */
+function currentMenu(plan) {
+  const n = plan.nutrition;
+  const couple = !!(state.coupleMenu && state.partner);
+  const menu = couple ? coupleMenu(state.profile, n, state.partner) : n.menu;
+  const ws = toISO(addDays(new Date(), -weekdayIndex(new Date())));
+  const days = menu.days.map((d, i) => ({
+    ...d,
+    meals: d.meals.map((m) => {
+      const sw = state.mealSwaps?.[`${toISO(addDays(fromISO(ws), i))}|${m.id}`];
+      return sw ? { ...m, ...sw, swapped: true, original: m.name, partner: null } : m;
+    }),
+  }));
+  return { ...menu, days, couple };
+}
+
 function viewFood() {
   const plan = getPlan();
   const n = plan.nutrition;
-  const menu = n.menu;
+  const menu = currentMenu(plan);
   if (menuDay === null) menuDay = weekdayIndex(new Date());
   const day = menu.days[menuDay];
+  const pn = state.partner?.nome || 'l’altra persona';
   const diff = n.kcal - n.tdee;
   const modo = n.mode === 'deficit'
     ? `Circa ${fmt(Math.abs(diff), 0)} kcal in meno di quelle che consumi: abbastanza per perdere ${fmt(n.rate, 1)} kg a settimana senza soffrire la fame.`
@@ -809,14 +857,23 @@ function viewFood() {
 
   <div class="section-title"><h2>Il tuo menu</h2></div>
   <nav class="daypick ${R(3)}" aria-label="Giorno">${WEEKDAYS.map((l, i) => `<button data-action="menu-day" data-day="${i}" class="${i === menuDay ? 'on' : ''}">${l}</button>`).join('')}</nav>
+  ${state.partner ? `<div class="seg couple-toggle ${R(3)}"><button data-action="couple-menu" data-on="0" class="${menu.couple ? '' : 'on'}">Solo per me</button><button data-action="couple-menu" data-on="1" class="${menu.couple ? 'on' : ''}">Con ${esc(state.partner.nome || 'il partner')}</button></div>` : ''}
   <div class="stack" id="menu-day">
-    ${day.meals.map((m) => `
+    ${day.meals.map((m) => {
+      const other = menu.couple && m.partner ? new Map(m.partner.items.map((i) => [i.food + (i.plus ? '+' : ''), i])) : null;
+      return `
       <section class="card meal">
-        <div class="row between"><span class="kicker">${m.label}</span><span class="small muted">${fmt(m.kcal)} kcal · ${m.protein} g prot.</span></div>
+        <div class="row between"><span class="kicker">${m.label}${m.swapped ? ' · scelta da te' : ''}</span><span class="small muted">${fmt(m.kcal)} kcal · ${m.protein} g prot.</span></div>
         <h3>${esc(m.name)}</h3>
-        ${m.items.length ? `<ul class="portions">${m.items.map((i) => `<li class="${i.plus ? 'plus' : ''}"><span>${i.plus ? '+ ' : ''}${esc(i.name)}</span><b>${esc(i.label)}</b></li>`).join('')}</ul>` : ''}
+        ${m.items.length ? `<ul class="portions ${other ? 'two' : ''}">${other ? `<li class="ph"><span></span><b>Tu</b><b>${esc(pn)}</b></li>` : ''}${m.items.map((i) => `<li class="${i.plus ? 'plus' : ''}"><span>${i.plus ? '+ ' : ''}${esc(i.name)}${i.stima ? ' *' : ''}</span><b>${esc(other ? i.label.replace('porzione abbondante', 'abbondante').replace('una porzione', '1 porzione') : i.label)}</b>${other ? `<b>${esc((other.get(i.food + (i.plus ? '+' : ''))?.label || '–').replace('porzione abbondante', 'abbondante').replace('una porzione', '1 porzione'))}</b>` : ''}</li>`).join('')}${other ? m.partner.items.filter((i) => i.plus && !m.items.some((x) => x.plus && x.food === i.food)).map((i) => `<li class="plus"><span>+ ${esc(i.name)}</span><b>–</b><b>${esc(i.label)}</b></li>`).join('') : ''}</ul>` : ''}
+        ${m.passi?.length ? `<details class="fold"><summary>Come si prepara</summary><ol class="steps-list">${m.passi.map((x) => `<li>${esc(x)}</li>`).join('')}</ol></details>` : ''}
         ${m.fuori ? `<p class="small muted">${esc(m.nota)}</p>` : ''}
-      </section>`).join('')}
+        <div class="meal-actions">
+          ${m.swapped ? `<button class="link small" data-action="meal-restore" data-day="${menuDay}" data-meal="${m.id}">Torna a ${esc(m.original.toLowerCase())}</button>` : `<a class="link small" href="#/ricetta?day=${menuDay}&meal=${m.id}">🧺 Cucina con quello che hai</a>`}
+        </div>
+      </section>`;
+    }).join('')}
+    ${menu.couple ? `<p class="small muted" style="text-align:center">Per ${esc(pn)}: circa ${fmt(Math.round((day.partnerKcal || 0) / 10) * 10)} kcal e ${day.partnerProtein || 0} g di proteine. Il menu rispetta le esigenze di entrambi.</p>` : ''}
     <p class="small muted" style="text-align:center">Totale del giorno: circa ${fmt(Math.round(day.kcal / 10) * 10)} kcal e ${Math.round(day.protein)} g di proteine. Pasta, riso e cereali pesati a crudo; legumi già cotti.${day.meals.some((m) => m.items.some((i) => i.plus)) ? ' Le voci con “+” sono aggiunte che ti portano alle proteine del giorno.' : ''}</p>
   </div>
 
@@ -825,7 +882,7 @@ function viewFood() {
   <div class="section-title"><h2>Per organizzarti</h2></div>
   <div class="stack">
     <details class="card fold"><summary><b>Lista della spesa della settimana</b></summary>
-      <ul class="portions">${menu.spesa.map((s) => `<li><span>${esc(s.name)}</span><b>${esc(s.qty)}</b></li>`).join('')}</ul>
+      ${menu.couple ? '<p class="small muted">Per tutti e due.</p>' : ''}<ul class="portions">${menu.spesa.map((s) => `<li><span>${esc(s.name)}</span><b>${esc(s.qty)}</b></li>`).join('')}</ul>
     </details>
     <details class="card fold"><summary><b>Come ho fatto i conti</b></summary>
       <div class="list-row"><span>Metabolismo a riposo</span><span>${fmt(n.bmr)} kcal</span></div>
@@ -1221,7 +1278,7 @@ function historyList(plan) {
   if (!done.length) return '<p class="muted">Ancora nessun allenamento completato. Il primo è il più importante.</p>';
   return done.map(([iso, l]) => {
     const wd = l.sessionFrom ?? weekdayIndex(fromISO(iso));
-    const s = plan.schedule[wd].session;
+    const s = wd >= 0 ? plan.schedule[wd].session : null;
     const fb = { facile: '😌', giusto: '💪', duro: '🥵' }[l.feedback] || '';
     return `<div class="list-row"><span>${fromISO(iso).toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' })} · ${esc(s ? s.title : 'Allenamento')}</span><span>${fb}</span></div>`;
   }).join('');
@@ -1260,7 +1317,16 @@ function viewProfile() {
   <section class="card">
     ${p.relazione ? `<p class="small muted story-quote">“${esc(p.relazione.length > 220 ? p.relazione.slice(0, 220) + '…' : p.relazione)}”</p>` : '<p class="small muted">Se preferisci scrivere invece di rispondere alle domande, posso leggere il tuo racconto.</p>'}
     <a class="btn soft wide" style="margin-top:12px" href="#/racconto">${p.relazione ? 'Aggiorna il racconto' : 'Scrivi il tuo racconto'}</a>
-    ${aiKey() ? '<p class="small muted" style="margin-top:10px">Analisi con Claude attiva. <button class="link small" data-action="ai-remove">Rimuovi la chiave</button></p>' : ''}
+  </section>
+
+  <div class="section-title"><h2>In coppia</h2></div>
+  <a class="card step-card" href="#/coppia"><span class="step-ico">💞</span><div><b>${state.partner ? `Collegato con ${esc(state.partner.nome || 'il tuo partner')}` : 'Allenati e mangia in coppia'}</b><p class="small muted">${state.partner ? `Aggiornato al ${formatDate(state.partner.at)}` : 'Menu da cucinare insieme, allenamenti di coppia, sfida della settimana.'}</p></div>${ICON.next}</a>
+
+  <div class="section-title"><h2>Intelligenza artificiale</h2></div>
+  <section class="card">
+    <p class="small muted">Con Claude, Ritmo inventa ricette con quello che hai in casa, ti consiglia come cambiare la giornata e capisce il tuo racconto. Serve una tua chiave API di Anthropic: resta solo su questo telefono e non finisce nelle copie dei dati. Senza chiave, tutto funziona lo stesso con i calcoli integrati.</p>
+    ${aiKey() ? '<div class="row between" style="margin-top:12px"><span class="chip ok">Attiva</span><button class="link small" data-action="ai-remove">Rimuovi la chiave</button></div>'
+      : '<div class="row" style="margin-top:12px"><input type="password" id="ai-key" placeholder="sk-ant-…" autocomplete="off"><button type="button" class="btn soft small" data-action="ai-save">Salva</button></div>'}
   </section>
 
   ${!standalone ? `
@@ -1286,6 +1352,298 @@ function viewProfile() {
 }
 
 // ==================================================================
+// Giornata flessibile
+// ==================================================================
+
+const WDL = ['lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato', 'domenica'];
+let dayForm = null;    // risposte di oggi
+let dayAI = null;      // { loading, pick, error }
+
+/** i 7 giorni della settimana corrente con sessione e registro */
+function weekDays(plan) {
+  const ws = addDays(new Date(), -weekdayIndex(new Date()));
+  return plan.schedule.map((d, i) => { const iso = toISO(addDays(ws, i)); return { weekday: i, iso, session: d.session, log: state.log[iso] }; });
+}
+
+function viewDay() {
+  const plan = getPlan();
+  const ti = weekdayIndex(new Date());
+  const { session } = sessionFor(plan, today());
+  if (!dayForm || dayForm.date !== today()) dayForm = { date: today(), energia: 'media', sonno: 'ok', tempo: session?.minutes || 30, dolore: false, impegni: [], nota: '' };
+  const f = dayForm;
+  const opts = dayOptions(weekDays(plan), ti, f);
+  const pick = dayAI?.pick && opts.find((o) => o.id === dayAI.pick.scelta);
+  const best = pick || opts[0];
+  const later = [0, 1, 2, 3, 4, 5, 6].filter((i) => i > ti);
+  const tempi = [10, 15, 20, 30, 45, 60, 75, 90];
+  return `
+  ${subHdr('Com’è la tua giornata?', '#/oggi')}
+  ${coach(session ? `Oggi era previsto: <b>${esc(session.title.toLowerCase())}</b>, ${session.minutes} minuti. Dimmi come stai e ti propongo cosa fare.` : 'Oggi era riposo. Se hai energia o se nei prossimi giorni sei pieno di impegni, possiamo riorganizzare la settimana.', R(1))}
+  <form id="day-form" class="stack-lg" onsubmit="return false" style="margin-top:16px">
+    <div class="field ${R(2)}"><span>Energia</span>${seg('d_energia', [['bassa', 'Scarico'], ['media', 'Normale'], ['alta', 'Carico']], f.energia)}</div>
+    <div class="field ${R(2)}"><span>Stanotte hai dormito</span>${seg('d_sonno', [['poco', 'Poco'], ['ok', 'Abbastanza']], f.sonno)}</div>
+    <div class="field ${R(3)}"><span>Tempo che hai oggi</span>${seg('d_tempo', tempi.map((m) => [m, `${m}′`]), f.tempo)}</div>
+    <div class="field ${R(3)}"><span>Dolori o fastidi nuovi?</span>${seg('d_dolore', [['0', 'No'], ['1', 'Sì']], f.dolore ? '1' : '0')}</div>
+    ${later.length ? `<div class="field ${R(4)}"><span>Nei prossimi giorni sei pieno di impegni?</span><div class="chips" data-day-multi="impegni">${later.map((i) => `<button type="button" data-value="${i}" class="${f.impegni.includes(i) ? 'on' : ''}">${WEEKDAYS[i]}</button>`).join('')}</div></div>` : ''}
+  </form>
+
+  <div class="section-title"><h2>Cosa ti propongo</h2></div>
+  <div class="stack" id="day-opts">
+    ${opts.map((o) => `
+      <section class="card option ${o === best ? 'best' : ''}">
+        ${o === best ? `<span class="chip accent">${pick ? 'Consigliato dal coach AI' : 'Il mio consiglio'}</span>` : ''}
+        <h3>${esc(o.title)}</h3>
+        <p class="small muted">${esc(o.text)}</p>
+        ${o === best && pick ? `<p class="finding-effect"><b>Perché</b>${esc(dayAI.pick.perche)}</p><p class="small" style="margin-top:8px">💡 ${esc(dayAI.pick.consiglio)}</p>` : ''}
+        ${o.apply.length ? `<button class="btn ${o === best ? 'primary' : 'soft'} wide" style="margin-top:12px" data-action="day-apply" data-id="${o.id}">Scelgo questa</button>` : `<a class="btn ${o === best ? 'primary' : 'soft'} wide" style="margin-top:12px" href="#/oggi">Va bene così</a>`}
+      </section>`).join('')}
+  </div>
+
+  <div class="section-title"><h2>Chiedi al coach AI</h2></div>
+  <section class="card">
+    <p class="small muted">Raccontami la tua giornata con parole tue: Claude sceglie tra queste opzioni e ti spiega perché.</p>
+    <textarea id="day-note" style="margin-top:10px" placeholder="Es. stasera ho una cena fuori e domani mi alzo presto">${esc(f.nota)}</textarea>
+    ${aiKey() ? `<button class="btn soft wide" style="margin-top:10px" data-action="day-ai" ${dayAI?.loading ? 'disabled' : ''}>${dayAI?.loading ? 'Il coach sta pensando…' : '✨ Chiedi al coach AI'}</button>` : '<a class="btn soft wide" style="margin-top:10px" href="#/profilo">Attiva l’AI nel profilo</a>'}
+    ${dayAI?.error ? `<p class="error" style="margin-top:10px">${esc(dayAI.error)}</p>` : ''}
+  </section>`;
+}
+
+async function askDayAI(btn) {
+  const plan = getPlan();
+  const ti = weekdayIndex(new Date());
+  dayForm.nota = document.getElementById('day-note')?.value || '';
+  const opts = dayOptions(weekDays(plan), ti, dayForm);
+  if (!opts.length) return;
+  dayAI = { loading: true };
+  rerender();
+  const settimana = weekDays(plan).map((d) => {
+    const sf = sessionFor(plan, d.iso);
+    const s = sf.session;
+    return `${WDL[d.weekday]}${d.weekday === ti ? ' (oggi)' : ''}: ${s ? `${s.title}, ${s.minutes} min${s.luogo ? `, ${LUOGO_LABEL[s.luogo].toLowerCase()}` : ''}` : 'riposo'}${sf.extra ? ` + ${sf.extra.title}` : ''}${d.log?.done ? ' (fatto)' : ''}`;
+  });
+  try {
+    const r = await aiGiornata(aiKey(), { opzioni: opts, settimana, risposte: { ...dayForm, impegni: dayForm.impegni.map((i) => WDL[i]) }, nota: dayForm.nota, obiettivo: GOALS.find((g) => g.id === state.profile.obiettivo)?.label || '' });
+    dayAI = { pick: r };
+  } catch (e) { dayAI = { error: `Non sono riuscito a chiedere al coach AI: ${aiError(e)}. Il mio consiglio resta quello in cima.` }; }
+  rerender();
+}
+
+/** in Oggi: la giornata è stata cambiata, con la possibilità di annullare */
+function changedCard() {
+  const c = state.lastChange;
+  if (!c || c.date !== today()) return '';
+  return `<div class="alert info ${R(2)}"><span>🔀</span><span>Hai scelto: <b>${esc(c.title.toLowerCase())}</b>. <button class="link small" data-action="day-undo">Annulla</button></span></div>`;
+}
+
+// ==================================================================
+// Ricette con quello che hai in casa
+// ==================================================================
+
+let recipeState = null; // { key, results, loading, error, altro }
+
+function viewRecipe() {
+  const plan = getPlan();
+  const menu = currentMenu(plan);
+  const di = Number(routeQuery.get('day') ?? weekdayIndex(new Date()));
+  const mid = routeQuery.get('meal') || 'pranzo';
+  const meal = menu.days[di]?.meals.find((m) => m.id === mid) || menu.days[di]?.meals[0];
+  if (!meal) return `${subHdr('Ricette', '#/cibo')}<p class="muted">Pasto non trovato.</p>`;
+  const key = `${di}|${meal.id}`;
+  if (!recipeState || recipeState.key !== key) recipeState = { key, results: null, altro: '' };
+  const have = state.pantry || [];
+  const target = { kcal: meal.kcal, protein: meal.protein, carbs: meal.carbs, fat: meal.fat };
+  const r = recipeState;
+  return `
+  ${subHdr('Cucina con quello che hai', '#/cibo', `${meal.label} di ${WDL[di]}`)}
+  ${coach(`Al posto di <b>${esc(meal.name.toLowerCase())}</b> ti serve un piatto da circa ${fmt(meal.kcal)} kcal e ${meal.protein} g di proteine. Dimmi cosa hai in casa.`, R(1))}
+  <div class="stack" style="margin-top:16px">
+    ${DISPENSA.map((g) => `<details class="pick-group" ${g.id === 'proteine' || g.id === 'carboidrati' ? 'open' : ''}>
+      <summary><span>${g.label}</span>${g.items.filter((x) => have.includes(x.id)).length ? `<span class="chip ok">${g.items.filter((x) => have.includes(x.id)).length}</span>` : ''}</summary>
+      <div class="pick-grid">${g.items.map((x) => `<button type="button" data-action="pantry" data-id="${x.id}" class="${have.includes(x.id) ? 'on' : ''}">${esc(x.label)}</button>`).join('')}</div>
+    </details>`).join('')}
+    <label class="field"><span>Altro che hai (facoltativo)</span><input type="text" id="pantry-altro" value="${esc(r.altro)}" placeholder="Es. zucchine, funghi, mezzo limone, curry"></label>
+    <div class="grid-2">
+      <button class="btn soft" data-action="recipe-find">Trova ricette</button>
+      ${aiKey() ? `<button class="btn primary" data-action="recipe-ai" ${r.loading ? 'disabled' : ''}>${r.loading ? 'Sto cucinando…' : '✨ Inventa con l’AI'}</button>` : '<a class="btn primary" href="#/profilo">✨ Attiva l’AI</a>'}
+    </div>
+    ${r.error ? `<p class="error">${esc(r.error)}</p>` : ''}
+  </div>
+  ${r.results ? `<div class="section-title"><h2>${r.results.length ? 'Le tue ricette' : 'Nessuna ricetta'}</h2></div>
+  <div class="stack">
+    ${r.results.length ? r.results.map((x, i) => recipeCard(x, i, target)).join('') : '<p class="muted">Con questi ingredienti non riesco a comporre un pasto completo: aggiungi almeno una fonte di proteine.</p>'}
+  </div>` : ''}`;
+}
+
+function recipeCard(x, i, target) {
+  const dk = Math.round(((x.kcal - target.kcal) / target.kcal) * 100);
+  const ok = Math.abs(dk) <= 12 && x.protein >= target.protein * 0.85;
+  return `<section class="card meal">
+    <div class="row between"><span class="kicker">${x.fonte === 'ai' ? '✨ Ricetta dell’AI' : 'Ricetta calcolata'} · ${x.tempo} min</span><span class="chip ${ok ? 'ok' : 'warn'}">${ok ? 'In linea' : dk > 0 ? `+${dk}% kcal` : `${dk}% kcal`}</span></div>
+    <h3>${esc(x.name)}</h3>
+    <p class="small muted">${fmt(x.kcal)} kcal · ${x.protein} g proteine · ${x.carbs} g carboidrati · ${x.fat} g grassi</p>
+    <ul class="portions">${x.items.map((it) => `<li><span>${esc(it.name)}${it.stima ? ' *' : ''}</span><b>${esc(it.label)}</b></li>`).join('')}</ul>
+    ${x.items.some((it) => it.stima) ? '<p class="small muted">* valori stimati dall’AI: l’ingrediente non è nella tabella di Ritmo.</p>' : ''}
+    ${x.perche ? `<p class="small" style="margin-top:8px">${esc(x.perche)}</p>` : ''}
+    <details class="fold"><summary>Come si prepara</summary><ol class="steps-list">${x.passi.map((p) => `<li>${esc(p)}</li>`).join('')}</ol></details>
+    <button class="btn primary wide" style="margin-top:12px" data-action="recipe-use" data-i="${i}">Mangio questo</button>
+  </section>`;
+}
+
+async function findRecipes(ai) {
+  const plan = getPlan();
+  const menu = currentMenu(plan);
+  const [di, mid] = recipeState.key.split('|');
+  const meal = menu.days[Number(di)].meals.find((m) => m.id === mid);
+  recipeState.altro = document.getElementById('pantry-altro')?.value || '';
+  const pasto = mid.startsWith('spuntino') ? 'spuntino' : mid;
+  const target = { kcal: meal.kcal, protein: meal.protein, carbs: meal.carbs, fat: meal.fat };
+  if (!ai) {
+    recipeState.results = pantryRecipes(state.pantry || [], pasto, target, state.profile);
+    recipeState.error = null;
+    rerender();
+    return;
+  }
+  recipeState.loading = true; recipeState.error = null; rerender();
+  try {
+    recipeState.results = await aiRicette(aiKey(), { have: state.pantry || [], altro: recipeState.altro, pasto: meal.label.toLowerCase(), target, p: state.profile, dietaLabel: DIET_LABEL[state.profile.dieta] || 'onnivora' });
+  } catch (e) {
+    recipeState.results = pantryRecipes(state.pantry || [], pasto, target, state.profile);
+    recipeState.error = `L’AI non ha risposto (${aiError(e)}): ti mostro le ricette calcolate.`;
+  }
+  recipeState.loading = false;
+  rerender();
+}
+
+// ==================================================================
+// Coppia
+// ==================================================================
+
+let myCode = null;      // codice da condividere (calcolato quando serve)
+let incoming = null;    // { card, error } da un link ricevuto
+
+function partnerStats() {
+  const plan = getPlan();
+  const an = analyzeProgress(state, plan);
+  const ws = addDays(new Date(), -weekdayIndex(new Date()));
+  let week = 0;
+  for (let i = 0; i < 7; i++) { const l = state.log[toISO(addDays(ws, i))]; if (l?.done) week++; if (l?.x?.done) week++; }
+  return { done: Object.values(state.log).filter((l) => l.done).length, streak: an.streak, week };
+}
+
+function viewCouple() {
+  const P = state.partner;
+  const code = routeQuery.get('c');
+  if (code && (!incoming || incoming.code !== code)) {
+    incoming = { code, loading: true };
+    decodeCard(code).then((card) => { incoming = { code, card }; rerender(); }).catch(() => { incoming = { code, error: 'Il codice non è valido o è incompleto: fattelo rimandare.' }; rerender(); });
+  }
+  const inc = code && incoming?.code === code ? incoming : null;
+  if (inc && !inc.loading && inc.card && inc.card.id === state.coupleId) return `${subHdr('In coppia', '#/oggi')}${coach('Questo è il tuo codice: mandalo all’altra persona, non aprirlo tu.')}`;
+  if (inc && !inc.loading) {
+    if (inc.error) return `${subHdr('In coppia', '#/oggi')}<p class="error">${esc(inc.error)}</p>`;
+    const c = inc.card;
+    return `${subHdr('Collegati', '#/oggi')}
+      ${coach(`<b>${esc(c.nome || 'Qualcuno')}</b> ti ha mandato il suo codice: se vi collegate potete cucinare gli stessi piatti con porzioni diverse e allenarvi insieme.`, R(1))}
+      <section class="card ${R(2)}" style="margin-top:16px">
+        <div class="list-row"><span>Alimentazione</span><span>${esc(DIET_LABEL[c.dieta] || c.dieta)}</span></div>
+        <div class="list-row"><span>Allenamenti</span><span>${c.w.length} a settimana</span></div>
+        <div class="list-row"><span>Aggiornato al</span><span>${formatDate(c.at)}</span></div>
+        <p class="small muted" style="margin-top:10px">Il codice non contiene diagnosi né dolori: solo cosa evitare negli esercizi, il livello e i gusti a tavola.</p>
+      </section>
+      <div class="wizard-actions"><button class="btn primary" data-action="couple-link">${P && P.id === c.id ? 'Aggiorna i dati' : `Collegati con ${esc(c.nome || 'questa persona')}`}</button></div>`;
+  }
+  if (!P) {
+    return `${subHdr('In coppia', '#/oggi')}
+      ${coach('Allenarsi e mangiare con qualcuno aiuta a essere costanti. Vi scambiate un codice e vi collego: niente account, niente server.', R(1))}
+      <section class="card ${R(2)}" style="margin-top:16px">
+        <h3>1. Manda il tuo codice</h3>
+        <p class="small muted">Con un messaggio su WhatsApp, Telegram o email. Chi lo apre sul telefono con Ritmo si collega a te.</p>
+        <button class="btn primary wide" style="margin-top:12px" data-action="couple-share">Condividi il mio codice</button>
+      </section>
+      <section class="card ${R(3)}" style="margin-top:12px">
+        <h3>2. Apri il suo</h3>
+        <p class="small muted">Tocca il link che ti ha mandato, oppure incollalo qui.</p>
+        <div class="row" style="margin-top:10px"><input type="text" id="couple-code" placeholder="Incolla il link o il codice" autocomplete="off"><button class="btn soft small" data-action="couple-paste">Apri</button></div>
+      </section>
+      <section class="card ${R(4)}" style="margin-top:12px">${tips([
+        { icon: '🥗', title: 'Menu di coppia', text: 'Gli stessi piatti per tutti e due, ciascuno con le sue porzioni, una sola lista della spesa. Rispetta dieta e intolleranze di entrambi.' },
+        { icon: '🏋️', title: 'Allenamenti insieme', text: 'Ti indico il giorno migliore per allenarvi insieme e preparo una sessione con esercizi adatti a entrambi, ognuno con la sua dose.' },
+        { icon: '🏆', title: 'Sfida della settimana', text: 'Chi completa più allenamenti? Ogni volta che vi rimandate il codice, il conteggio si aggiorna.' },
+      ])}</section>`;
+  }
+  const plan = getPlan();
+  const tog = weekTogether(plan.schedule, P);
+  const ti = weekdayIndex(new Date());
+  // il giorno migliore da oggi in avanti; se questa settimana non ce n'è più, la prossima
+  let best = bestTogetherDay(tog, ti);
+  const nextWeek = !best;
+  if (!best) best = bestTogetherDay(tog, 0);
+  const ws = addDays(new Date(), -weekdayIndex(new Date()) + (nextWeek ? 7 : 0));
+  const me = partnerStats();
+  const stale = daysBetween(fromISO(P.at), new Date());
+  const coupleSet = (i) => state.log[toISO(addDays(ws, i))]?.couple;
+  return `
+  ${subHdr(`Tu e ${esc(P.nome || 'il tuo partner')}`, '#/oggi', `Dati aggiornati al ${formatDate(P.at)}`)}
+  ${stale >= 7 ? `<div class="alert attenzione ${R(1)}"><span>⏳</span><span>I dati di ${esc(P.nome || 'chi è collegato con te')} hanno più di una settimana: chiedigli di rimandarti il codice.</span></div>` : ''}
+
+  <section class="card ${R(1)}" style="margin-top:12px">
+    <h3>Sfida della settimana</h3>
+    <div class="vs"><div><b>${me.week}</b><span>Tu</span></div><span class="small muted">allenamenti fatti</span><div><b>${P.s?.week ?? 0}</b><span>${esc(P.nome || 'Partner')}</span></div></div>
+    <p class="small muted">${me.week > (P.s?.week ?? 0) ? 'Sei in vantaggio: non mollare.' : me.week < (P.s?.week ?? 0) ? 'Sei indietro: oggi è un buon giorno per recuperare.' : 'Siete pari.'} Il conteggio di ${esc(P.nome || 'chi è collegato con te')} si aggiorna quando ti rimanda il codice.</p>
+  </section>
+
+  <div class="section-title"><h2>La vostra settimana</h2></div>
+  <section class="card ${R(2)}">
+    ${tog.map((d) => `<div class="together ${d.weekday === ti ? 'is-today' : ''}"><span class="day-label">${d.label}</span>
+      <span class="grow"><span class="small"><b>Tu</b> ${d.me ? `${esc(d.me.title)} · ${d.me.minutes}′` : 'riposo'}</span><span class="small muted"><b>${esc(P.nome || 'Partner')}</b> ${d.them ? `${esc(d.them.title)} · ${d.them.minutes}′` : 'riposo'}</span></span>
+      ${d.me && d.them && coupleSet(d.weekday) ? '<span class="chip ok">Insieme</span>' : ''}</div>`).join('')}
+  </section>
+  ${best ? `<section class="card ${R(3)}" style="margin-top:12px">
+    <h3>Allenatevi insieme ${WDL[best.weekday]}${nextWeek ? ' prossimo' : ''}</h3>
+    <p class="small muted">Vi allenate entrambi${best.me.luogo && best.me.luogo === best.them.luogo ? `, tutti e due ${LUOGO_LABEL[best.me.luogo].toLowerCase()}` : ''}. Preparo una sessione da ${best.me.minutes} minuti con esercizi adatti a entrambi, ognuno con la sua dose.</p>
+    ${coupleSet(best.weekday) ? `<button class="btn soft wide" style="margin-top:12px" data-action="couple-day" data-day="${best.weekday + (nextWeek ? 7 : 0)}" data-on="0">Torna al mio allenamento</button>` : `<button class="btn primary wide" style="margin-top:12px" data-action="couple-day" data-day="${best.weekday + (nextWeek ? 7 : 0)}" data-on="1">Sì, alleniamoci insieme</button>`}
+  </section>` : ''}
+
+  <div class="section-title"><h2>A tavola insieme</h2></div>
+  <a class="card step-card ${R(4)}" href="#/cibo" data-action="couple-menu-go"><span class="step-ico">🥗</span><div><b>${state.coupleMenu ? 'Menu di coppia attivo' : 'Attiva il menu di coppia'}</b><p class="small muted">Stessi piatti, porzioni per ciascuno, una lista della spesa. Rispetta ${esc(DIET_LABEL[P.dieta]?.toLowerCase() || P.dieta)} e le esclusioni di entrambi.</p></div>${ICON.next}</a>
+
+  <div class="section-title"><h2>Tenetevi aggiornati</h2></div>
+  <section class="card stack">
+    <p class="small muted">Quando cambi qualcosa o finisci un allenamento, rimanda il tuo codice: così l’altra persona vede i tuoi progressi.</p>
+    <button class="btn primary wide" data-action="couple-share">Manda il mio codice aggiornato</button>
+    <button class="btn line wide" data-action="couple-unlink">Scollega</button>
+  </section>`;
+}
+
+function mountCouple() { /* il codice si crea al momento della condivisione */ }
+
+async function shareMyCode() {
+  const plan = getPlan();
+  const card = buildCard(state, plan, planCtx(), partnerStats());
+  save();
+  const code = await encodeCard(card);
+  const url = shareUrl(code, `${location.origin}${location.pathname}`);
+  myCode = url;
+  const text = `${state.profile.nome || 'Ciao'}: alleniamoci e mangiamo insieme con Ritmo. Apri questo link dal telefono:`;
+  try {
+    if (navigator.share) { await navigator.share({ title: 'Ritmo in coppia', text, url }); return; }
+  } catch (e) { if (e?.name === 'AbortError') return; }
+  try { await navigator.clipboard.writeText(`${text}\n${url}`); toast('Link copiato: incollalo in un messaggio'); } catch { prompt('Copia questo link e mandalo:', url); }
+}
+
+/** in Oggi: cosa fa oggi la persona collegata */
+function partnerTodayCard(plan, wd) {
+  const P = state.partner;
+  if (!P) {
+    let pending = null; try { pending = localStorage.getItem('ritmo.pendingPartner'); } catch { /* */ }
+    return pending ? `<a class="card step-card ${R(4)}" href="#/coppia?c=${pending}"><span class="step-ico">💞</span><div><b>Qualcuno vuole collegarsi a te</b><p class="small muted">Hai aperto un codice di coppia: tocca per collegarti.</p></div>${ICON.next}</a>` : '';
+  }
+  const them = P.w.find((x) => x[0] === wd);
+  const together = state.log[today()]?.couple;
+  return `<a class="card step-card ${R(4)}" href="#/coppia"><span class="step-ico">💞</span><div><b>${together ? `Oggi vi allenate insieme` : them ? `Oggi si allena anche ${esc(P.nome || 'il tuo partner')}` : `${esc(P.nome || 'Il tuo partner')} oggi riposa`}</b><p class="small muted">${them ? `${esc(them[4])} · ${them[1]} min` : 'Sfida della settimana, menu e allenamenti di coppia'}</p></div>${ICON.next}</a>`;
+}
+
+// ==================================================================
 // Azioni
 // ==================================================================
 
@@ -1304,8 +1662,8 @@ function applyAction(a) {
   rerender();
 }
 
-function markDone(iso, fb) {
-  const lg = dayLog(iso);
+function markDone(iso, fb, which = '') {
+  const lg = partLog(iso, which);
   lg.done = true; lg.feedback = fb; lg.doneAt = new Date().toISOString();
   showFeedback = false;
   save(); rerender();
@@ -1314,15 +1672,16 @@ function markDone(iso, fb) {
   toast(['Grande lavoro', 'Un passo in più verso l’obiettivo', 'Fatto: la costanza paga'][Math.floor(Math.random() * 3)]);
 }
 
-function startPlayer(iso) {
+function startPlayer(iso, which = '') {
   const week = Math.max(1, Math.floor(daysBetween(fromISO(state.planStart), fromISO(iso)) / 7) + 1);
-  const { session } = sessionFor(getPlan(week), iso);
+  const sf = sessionFor(getPlan(week), iso);
+  const session = which === 'x' ? sf.extra : sf.session;
   if (!session) return;
-  const lg = dayLog(iso);
+  const lg = partLog(iso, which);
   openPlayer(session, {
     doneKeys: lg.items,
-    onItemDone: (key) => { const l = dayLog(iso); if (!l.items.includes(key)) l.items.push(key); save(); },
-    onFinish: (fb) => markDone(iso, fb),
+    onItemDone: (key) => { const l = partLog(iso, which); if (!l.items.includes(key)) l.items.push(key); save(); },
+    onFinish: (fb) => markDone(iso, fb, which),
     onExFeedback: (exId, fb) => {
       state.fbCount = (state.fbCount || 0) + 1;
       if (fb === 'dolore') {
@@ -1343,6 +1702,20 @@ document.addEventListener('click', (e) => {
   if (location.hash === '#/valutazione' && handleAssessmentClick(e, rerender)) return;
   const t = e.target.closest('[data-action], .seg button, .opts button, .chips[data-multi] button, .picks[data-multi] button');
   if (!t || t.closest('#player') || t.closest('.sheet')) return;
+
+  // giornata flessibile: le risposte aggiornano subito le opzioni
+  const dSeg = t.closest('button')?.parentElement?.closest('#day-form .seg[data-name]');
+  if (dSeg && dayForm) {
+    const k = dSeg.dataset.name.slice(2);
+    dayForm[k] = k === 'tempo' ? Number(t.dataset.value) : k === 'dolore' ? t.dataset.value === '1' : t.dataset.value;
+    dayAI = null; haptic(8); rerender(); return;
+  }
+  const dMulti = t.parentElement?.closest('[data-day-multi]');
+  if (dMulti && dayForm) {
+    const v = Number(t.dataset.value);
+    dayForm.impegni = dayForm.impegni.includes(v) ? dayForm.impegni.filter((x) => x !== v) : [...dayForm.impegni, v];
+    dayAI = null; haptic(8); rerender(); return;
+  }
 
   const slotSeg = t.parentElement?.closest('.seg[data-slot]');
   if (slotSeg && draft && !t.dataset.action) {
@@ -1448,9 +1821,79 @@ document.addEventListener('click', (e) => {
     case 'reset-choices':
       if (confirm('Annullare tutte le sostituzioni, le esclusioni e gli adattamenti dei singoli esercizi?')) { state.swaps = {}; state.excluded = []; state.exAdj = {}; save(); rerender(); toast('Scelte ripristinate'); }
       break;
-    case 'play': startPlayer(t.dataset.iso); break;
+    case 'play': startPlayer(t.dataset.iso, t.dataset.which); break;
+    case 'day-ai': askDayAI(t); break;
+    case 'day-apply': {
+      const plan = getPlan();
+      const o = dayOptions(weekDays(plan), weekdayIndex(new Date()), dayForm).find((x) => x.id === t.dataset.id);
+      if (!o) return;
+      if (state.lastChange?.date === today()) undoOption(state.log, state.lastChange.undo);
+      state.lastChange = { date: today(), title: o.title, undo: applyOption(state.log, o) };
+      save(); dayAI = null; haptic([10, 30, 10]); location.hash = '#/oggi'; toast('Settimana aggiornata');
+      break;
+    }
+    case 'day-undo': undoOption(state.log, state.lastChange?.undo); state.lastChange = null; save(); rerender(); toast('Giornata ripristinata'); break;
+    case 'pantry': {
+      const set = new Set(state.pantry || []);
+      set.has(t.dataset.id) ? set.delete(t.dataset.id) : set.add(t.dataset.id);
+      state.pantry = [...set]; save(); haptic(8);
+      t.classList.toggle('on');
+      break;
+    }
+    case 'recipe-find': findRecipes(false); break;
+    case 'recipe-ai': findRecipes(true); break;
+    case 'recipe-use': {
+      const x = recipeState?.results?.[Number(t.dataset.i)];
+      if (!x) return;
+      const [di, mid] = recipeState.key.split('|');
+      const ws = addDays(new Date(), -weekdayIndex(new Date()));
+      state.mealSwaps = state.mealSwaps || {};
+      state.mealSwaps[`${toISO(addDays(ws, Number(di)))}|${mid}`] = { name: x.name, items: x.items, passi: x.passi, kcal: x.kcal, protein: x.protein, carbs: x.carbs, fat: x.fat };
+      save(); menuDay = Number(di); location.hash = '#/cibo'; toast('Pasto aggiornato');
+      break;
+    }
+    case 'meal-restore': {
+      const ws = addDays(new Date(), -weekdayIndex(new Date()));
+      delete state.mealSwaps?.[`${toISO(addDays(ws, Number(t.dataset.day)))}|${t.dataset.meal}`];
+      save(); rerender();
+      break;
+    }
+    case 'couple-menu': state.coupleMenu = t.dataset.on === '1'; save(); rerender(); break;
+    case 'couple-menu-go': state.coupleMenu = true; save(); break;
+    case 'couple-share': shareMyCode(); break;
+    case 'couple-paste': {
+      const v = document.getElementById('couple-code').value.trim();
+      const c = v.replace(/^.*[?&]c=/, '');
+      if (c.length < 10) { toast('Incolla il link completo'); return; }
+      location.hash = `#/coppia?c=${c}`;
+      break;
+    }
+    case 'couple-link': {
+      if (!incoming?.card) return;
+      const first = !state.partner || state.partner.id !== incoming.card.id;
+      state.partner = incoming.card;
+      if (first) state.coupleMenu = true;
+      try { localStorage.removeItem('ritmo.pendingPartner'); } catch { /* */ }
+      save(); incoming = null; location.hash = '#/coppia';
+      toast(first ? 'Collegati! Ora mandagli il tuo codice' : 'Dati aggiornati');
+      break;
+    }
+    case 'couple-unlink':
+      if (confirm('Scollegarti? Il menu e gli allenamenti tornano solo tuoi.')) {
+        state.partner = null; state.coupleMenu = false;
+        for (const l of Object.values(state.log)) delete l.couple;
+        save(); rerender();
+      }
+      break;
+    case 'couple-day': {
+      const ws = addDays(new Date(), -weekdayIndex(new Date()));
+      const lg = dayLog(toISO(addDays(ws, Number(t.dataset.day))));
+      if (t.dataset.on === '1') lg.couple = true; else delete lg.couple;
+      save(); rerender(); toast(t.dataset.on === '1' ? 'Allenamento di coppia in programma' : 'Torna il tuo allenamento');
+      break;
+    }
     case 'toggle-item': {
-      const lg = dayLog(t.dataset.iso);
+      const lg = partLog(t.dataset.iso, t.dataset.which);
       const set = new Set(lg.items);
       set.has(t.dataset.key) ? set.delete(t.dataset.key) : set.add(t.dataset.key);
       lg.items = [...set];
@@ -1459,9 +1902,9 @@ document.addEventListener('click', (e) => {
       t.classList.toggle('on'); t.closest('.ex')?.classList.toggle('done');
       break;
     }
-    case 'ask-feedback': showFeedback = true; rerender(); break;
-    case 'done': markDone(t.dataset.iso, t.dataset.fb); break;
-    case 'undo-done': { const lg = dayLog(t.dataset.iso); lg.done = false; delete lg.feedback; save(); rerender(); break; }
+    case 'ask-feedback': showFeedback = t.dataset.which || 'main'; rerender(); break;
+    case 'done': markDone(t.dataset.iso, t.dataset.fb, t.dataset.which); break;
+    case 'undo-done': { const lg = partLog(t.dataset.iso, t.dataset.which); lg.done = false; delete lg.feedback; save(); rerender(); break; }
     case 'move-session': { const lg = dayLog(t.dataset.iso); lg.sessionFrom = Number(t.dataset.from); save(); rerender(); break; }
     case 'habit': {
       const lg = dayLog(today());

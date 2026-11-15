@@ -3,6 +3,26 @@
 PWA (installabile sul telefono, funziona offline) che si comporta come un personal trainer e un nutrizionista:
 prima indaga, poi prepara allenamento e menu su misura, poi segue la persona giorno per giorno.
 
+## Novità della versione 6: in coppia e più intelligente
+
+- **In coppia, senza account né server**: ognuno manda all’altro un link (WhatsApp, email…) con i soli dati che servono.
+  Il codice non contiene diagnosi né dolori: solo gli esercizi da evitare, il livello per ogni schema motorio, dieta,
+  fabbisogno e settimana. Collegati, si ottengono:
+  - **menu di coppia**: stessi piatti per tutti e due, porzioni calcolate per ciascuno, una sola lista della spesa,
+    rispettando dieta, intolleranze ed esclusioni di entrambi;
+  - **allenamento insieme**: il giorno migliore della settimana e una sessione con esercizi adatti a entrambi,
+    al livello del più basso dei due, con la dose di ciascuno;
+  - **sfida della settimana**: allenamenti fatti da te e dall’altra persona (si aggiorna quando vi rimandate il codice).
+- **Giornata flessibile** ("Com’è la tua giornata?"): energia, sonno, tempo disponibile, dolori e impegni dei prossimi giorni.
+  L’app propone e applica con un tocco: come previsto, versione corta o leggera ricostruita sul tempo, scambio con un altro
+  giorno, spostamento in un giorno libero, riposo oggi e doppio allenamento un altro giorno (solo se sostenibile),
+  recupero attivo, anticipo di una sessione. Ogni scelta si annulla.
+- **Ricette con quello che hai in casa**: dalla dispensa (alimenti da toccare più testo libero) ricette con grammature
+  calcolate sul pasto da sostituire. Offline con i calcoli integrati; con Claude ricette vere e varie, con i valori
+  ricalcolati sulla tabella di Ritmo. "Mangio questo" sostituisce il pasto nel menu.
+- **Coach AI**: con la propria chiave API Anthropic, Claude sceglie tra le opzioni della giornata calcolate dall’app e spiega
+  perché (non può proporre cambi non previsti). Senza chiave tutto funziona con i calcoli integrati.
+
 ## Novità della versione 5: indagine, foto reali, menu, tema caldo
 
 - **Percorso guidato dal coach**: una domanda per schermata, in prima persona, con le sole domande che riguardano quella persona
@@ -117,7 +137,10 @@ js/assessment.js      test, punteggi, composizione corporea, KPI, indice di prec
 js/assess-ui.js       valutazione guidata con cronometro e metronomo
 js/narrative.js       relazione in testo libero: analisi offline e con Claude
 js/gymreview.js       revisione della scheda di palestra
-js/diet.js            tipi di dieta, menu settimanale con grammature, lista della spesa
+js/diet.js            tipi di dieta, menu settimanale e di coppia, ricette dalla dispensa, lista della spesa
+js/giornata.js        giornata flessibile: opzioni per cambiare la settimana, applica e annulla
+js/coppia.js          codice di coppia, settimana insieme, giorno migliore per allenarsi insieme
+js/ai.js              Claude: ricette dalla dispensa e scelta della giornata
 js/player.js          allenamento guidato a schermo intero
 js/sheet.js           scheda esercizio (foto + guida)
 js/fx.js              icone, effetti, suoni, voce
