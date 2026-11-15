@@ -297,6 +297,8 @@ function excludedTags(p = {}) {
   const intol = new Set(p.intolleranze || []);
   if (intol.has('fruttasecca')) tags.add('fruttasecca');
   if (intol.has('glutine')) tags.add('glutine!');
+  // menu di coppia: anche le esclusioni della dieta dell'altra persona
+  for (const t of p.escludiTag || []) tags.add(t);
   return { tags, intol, dieta };
 }
 
@@ -465,10 +467,11 @@ export function weekMenu(p, n) {
         // a cena una fonte proteica diversa dal pranzo
         if (key === 'cena' && lunchSrc) for (let t = 0; t < list.length && mainSource(list[k]) === lunchSrc; t++) k = (k + 1) % list.length;
         meal = portion(list[k], kcalT, protT, ex);
+        meal.dish = list[k];
         if (key === 'pranzo') lunchSrc = mainSource(list[k]);
       }
       usedK += meal.kcal; usedP += meal.protein;
-      meals.push({ id: m.id, label: m.label, ...meal });
+      meals.push({ id: m.id, label: m.label, share: m.share, ...meal });
     }
     // se mancano proteine, aggiungi un alimento proteico dove sta bene (spuntino, colazione, fine pasto)
     const order = ['spuntino2', 'spuntino1', 'colazione', 'cena', 'pranzo'];
@@ -500,17 +503,165 @@ export function weekMenu(p, n) {
     return { label, meals, kcal: meals.reduce((a, x) => a + x.kcal, 0), protein: meals.reduce((a, x) => a + x.protein, 0) };
   });
 
-  // lista della spesa della settimana
+  const spesa = shoppingList(days);
+
+  return { days, struct, spesa, avgKcal: Math.round(days.reduce((a, d) => a + d.kcal, 0) / 7), avgProtein: Math.round(days.reduce((a, d) => a + d.protein, 0) / 7) };
+}
+
+/** lista della spesa da uno o più menu (i pasti con `items`) */
+export function shoppingList(days, extra = []) {
   const tot = {};
-  for (const d of days) for (const m of d.meals) for (const it of m.items) {
-    if (['verdure', 'insalata', 'frutta', 'passata'].includes(it.food)) { tot[it.food] = tot[it.food] || { name: it.name, grams: 0, n: 0 }; tot[it.food].n++; continue; }
+  const add = (it) => {
+    if (!it.food || !FOOD[it.food]) return;
     tot[it.food] = tot[it.food] || { name: it.name, grams: 0, n: 0 };
-    tot[it.food].grams += it.grams; tot[it.food].n++;
-  }
-  const spesa = Object.entries(tot).map(([food, v]) => ({
+    tot[it.food].n++;
+    if (!['verdure', 'insalata', 'frutta', 'passata'].includes(it.food)) tot[it.food].grams += it.grams;
+  };
+  for (const d of days) for (const m of d.meals) for (const it of m.items) add(it);
+  for (const it of extra) add(it);
+  return Object.entries(tot).map(([food, v]) => ({
     food, name: v.name,
     qty: food === 'uova' ? `${Math.round(v.grams / 55)} uova` : food === 'banana' ? `${v.n} banane` : v.grams ? (v.grams >= 1000 ? `${(v.grams / 1000).toLocaleString('it-IT', { maximumFractionDigits: 1 })} kg` : `${Math.round(v.grams / 10) * 10} g`) : `${v.n} porzioni`,
   })).sort((a, b) => a.name.localeCompare(b.name, 'it'));
+}
 
-  return { days, struct, spesa, avgKcal: Math.round(days.reduce((a, d) => a + d.kcal, 0) / 7), avgProtein: Math.round(days.reduce((a, d) => a + d.protein, 0) / 7) };
+// ==================================================================
+// Menu di coppia: stessi piatti, porzioni diverse
+// ==================================================================
+
+const DIET_STRICT = ['onnivora', 'flessitariana', 'pescetariana', 'latto-ovo', 'latto', 'vegana'];
+
+/**
+ * Menu da cucinare insieme.
+ * p, n: profilo e fabbisogno di chi usa l'app · partner: { nome, dieta, intolleranze, noncibi, kcal, protein }
+ * Le esclusioni sono l'unione delle due persone; le porzioni sono calcolate per ciascuno.
+ */
+export function coupleMenu(p, n, partner) {
+  const dieta = [p.dieta || 'onnivora', partner.dieta || 'onnivora'].sort((a, b) => DIET_STRICT.indexOf(b) - DIET_STRICT.indexOf(a))[0];
+  const merged = {
+    ...p, dieta,
+    intolleranze: [...new Set([...(p.intolleranze || []), ...(partner.intolleranze || [])])],
+    noncibi: [...new Set([...(p.noncibi || []), ...(partner.noncibi || [])])],
+    escludiTag: [...new Set([...(DIET_EXCLUDE[p.dieta] || []), ...(DIET_EXCLUDE[partner.dieta] || [])])],
+    // il pranzo fuori casa non si condivide: la coppia cucina a casa
+    pranzo: p.pranzo === 'fuori' ? 'casa' : p.pranzo,
+  };
+  const ex = excludedTags(merged);
+  const mine = weekMenu(merged, n);
+  const days = mine.days.map((d) => {
+    let usedK = 0, usedP = 0, left = 1;
+    const meals = d.meals.map((m) => {
+      const kT = ((partner.kcal - usedK) * m.share) / left;
+      const pT = Math.max(m.id.startsWith('spuntino') ? 8 : 18, ((partner.protein - usedP) * m.share) / left);
+      left -= m.share;
+      const other = m.dish ? portion(m.dish, kT, pT, ex) : null;
+      if (other) { usedK += other.kcal; usedP += other.protein; }
+      return { ...m, partner: other };
+    });
+    // anche per l'altra persona: un'aggiunta proteica se il totale resta basso
+    const tipoCol = p.colazione === 'salata' ? 'salata' : 'dolce';
+    for (const id of ['spuntino2', 'spuntino1', 'colazione']) {
+      if (usedP >= partner.protein * 0.9) break;
+      const m = meals.find((x) => x.id === id && x.partner);
+      const f = m && boostersFor({ id, items: m.partner.items }, tipoCol, ex)[0];
+      if (!f) continue;
+      const it = mkItem(f, BOOST[f], ex);
+      m.partner.items.push({ ...it, plus: true });
+      totals(m.partner);
+      usedK += it.kcal; usedP += it.protein;
+    }
+    return { ...d, meals, partnerKcal: Math.round(usedK), partnerProtein: Math.round(usedP) };
+  });
+  const partnerItems = days.flatMap((d) => d.meals.flatMap((m) => m.partner?.items || []));
+  return { ...mine, days, spesa: shoppingList(days, partnerItems), dieta };
+}
+
+// ==================================================================
+// Ricette con quello che c'è in casa (calcolo offline)
+// ==================================================================
+
+export const DISPENSA = [
+  { id: 'proteine', label: 'Proteine', items: ['pollo', 'manzo', 'bresaola', 'salmone', 'merluzzo', 'tonno', 'uova', 'tofu', 'tempeh', 'seitan', 'ceci', 'lenticchie', 'fagioli', 'edamame', 'yogurt', 'fiocchi', 'ricotta', 'mozzarella', 'feta', 'parmigiano', 'latte', 'yogurtSoia', 'protVeg'] },
+  { id: 'carboidrati', label: 'Carboidrati', items: ['pasta', 'riso', 'farro', 'couscous', 'pane', 'patate', 'avena', 'gallette'] },
+  { id: 'verdure', label: 'Frutta e verdura', items: ['verdure', 'insalata', 'passata', 'frutta', 'banana', 'avocado'] },
+  { id: 'altro', label: 'Condimenti e altro', items: ['olio', 'noci', 'arachidi', 'semi', 'hummus', 'miele'] },
+].map((g) => ({ ...g, items: g.items.map((id) => ({ id, label: FOOD[id][0] })) }));
+export const FOOD_IDS = Object.keys(FOOD);
+export const foodLabel = (id) => FOOD[id]?.[0] || id;
+/** valori nutrizionali di un alimento della tabella */
+export function foodMacros(id, grams) {
+  const F = FOOD[id];
+  if (!F) return null;
+  return { kcal: (F[1] * grams) / 100, protein: (F[2] * grams) / 100, carbs: (F[3] * grams) / 100, fat: (F[4] * grams) / 100 };
+}
+
+const PROT_MAIN = ['pollo', 'manzo', 'salmone', 'merluzzo', 'tonno', 'uova', 'tofu', 'tempeh', 'seitan', 'ceci', 'lenticchie', 'fagioli', 'edamame', 'mozzarella', 'ricotta', 'fiocchi', 'bresaola', 'feta'];
+const PROT_SWEET = ['yogurt', 'fiocchi', 'ricotta', 'yogurtSoia', 'latte', 'uova', 'protVeg'];
+const CARB_MAIN = ['pasta', 'riso', 'farro', 'couscous', 'patate', 'pane'];
+const CARB_SWEET = ['avena', 'pane', 'gallette'];
+const METODO = {
+  pollo: 'Taglia il pollo a straccetti e cuocilo in padella con un filo d’olio 6–8 minuti, finché è dorato fuori e bianco dentro.',
+  manzo: 'Scotta il manzo in padella ben calda 2–3 minuti per lato, poi lascialo riposare e taglialo a fette.',
+  salmone: 'Cuoci il salmone in padella dalla parte della pelle 5 minuti, giralo e completa 2 minuti.',
+  merluzzo: 'Cuoci il pesce in padella coperta con un dito d’acqua o di passata, 8–10 minuti a fuoco medio.',
+  tonno: 'Sgocciola bene il tonno e sbriciolalo con una forchetta.',
+  uova: 'Strapazza le uova in padella antiaderente a fuoco basso, o falle sode (9 minuti in acqua bollente).',
+  tofu: 'Taglia il tofu a cubetti, asciugalo con carta da cucina e rosolalo in padella 8 minuti finché è croccante.',
+  tempeh: 'Taglia il tempeh a fette sottili e rosolalo 4 minuti per lato.',
+  seitan: 'Taglia il seitan a straccetti e scaldalo in padella 5 minuti.',
+  ceci: 'Sciacqua i legumi e scaldali in padella 5 minuti con le spezie che hai (paprika, cumino, rosmarino).',
+  lenticchie: 'Sciacqua le lenticchie e scaldale 5 minuti con un po’ di passata o d’acqua.',
+  fagioli: 'Sciacqua i fagioli e scaldali 5 minuti in padella con un pizzico di sale e rosmarino.',
+  edamame: 'Scotta gli edamame 3 minuti in acqua bollente salata.',
+  mozzarella: 'Taglia la mozzarella a cubetti e aggiungila all’ultimo, a fuoco spento.',
+  ricotta: 'Lavora la ricotta con un cucchiaio d’acqua di cottura (o di latte) fino a renderla cremosa.',
+  fiocchi: 'Scola i fiocchi di latte e aggiungili a fine preparazione.',
+  bresaola: 'Taglia la bresaola a striscioline.',
+  feta: 'Sbriciola la feta sopra il piatto finito.',
+};
+const CARB_COTTURA = {
+  pasta: 'Cuoci la pasta in acqua salata per il tempo indicato sulla confezione.',
+  riso: 'Cuoci il riso in acqua salata (basmati 10–12 minuti, integrale 35–40).',
+  farro: 'Cuoci il farro in acqua salata 20–25 minuti.',
+  couscous: 'Versa sul cous cous lo stesso volume di acqua bollente salata, copri 5 minuti e sgrana con una forchetta.',
+  patate: 'Taglia le patate a cubetti e cuocile al forno a 200 °C per 25 minuti, o al vapore per 15.',
+  pane: 'Tosta il pane.',
+};
+const CARB_NOME = { pasta: 'Pasta', riso: 'Riso', farro: 'Farro', couscous: 'Cous cous', patate: 'Patate', pane: 'Pane' };
+const PROT_NOME = { pollo: 'pollo', manzo: 'manzo', salmone: 'salmone', merluzzo: 'pesce', tonno: 'tonno', uova: 'uova', tofu: 'tofu', tempeh: 'tempeh', seitan: 'seitan', ceci: 'ceci', lenticchie: 'lenticchie', fagioli: 'fagioli', edamame: 'edamame', mozzarella: 'mozzarella', ricotta: 'ricotta', fiocchi: 'fiocchi di latte', bresaola: 'bresaola', feta: 'feta' };
+
+/**
+ * Fino a 3 ricette con gli ingredienti disponibili, con grammature calcolate sul pasto da sostituire.
+ * have: id degli alimenti in casa · pasto: colazione | pranzo | cena | spuntino · target: { kcal, protein } · p: profilo
+ */
+export function pantryRecipes(have, pasto, target, p = {}) {
+  const ex = excludedTags(p);
+  const ok = (f) => have.includes(f) && FOOD[f] && !FOOD[f][5].some((t) => ex.tags.has(t));
+  const sweet = pasto === 'colazione' && p.colazione !== 'salata';
+  const prots = (sweet ? PROT_SWEET : PROT_MAIN).filter(ok);
+  const carbs = (sweet ? CARB_SWEET : CARB_MAIN).filter(ok);
+  const veg = sweet ? ['frutta', 'banana'].filter(ok) : ['verdure', 'insalata', 'passata'].filter(ok);
+  const fat = sweet ? ['noci', 'arachidi', 'semi'].filter(ok) : ['olio', 'avocado', 'noci'].filter(ok);
+  const out = [];
+  for (let i = 0; i < prots.length && out.length < 3; i++) {
+    const pr = prots[i];
+    const cb = carbs.length ? carbs[i % carbs.length] : null;
+    const parts = [{ f: pr, r: 'P', g: pr === 'uova' ? 110 : pr === 'protVeg' ? 25 : 150 }];
+    // seconda fonte proteica (es. parmigiano o yogurt) se la prima è povera di proteine
+    if (cb) parts.push({ f: cb, r: 'C', g: cb === 'patate' ? 250 : cb === 'pane' ? 70 : cb === 'gallette' ? 25 : 70 });
+    for (const v of veg.slice(0, sweet ? 1 : 2)) parts.push({ f: v, r: 'F', g: v === 'passata' ? 100 : 150 });
+    if (fat[0]) parts.push({ f: fat[0], r: 'F', g: fat[0] === 'olio' ? 10 : 15 });
+    if (!sweet && ok('parmigiano') && ['pasta', 'riso', 'farro'].includes(cb) && !['mozzarella', 'ricotta', 'feta', 'fiocchi'].includes(pr)) parts.push({ f: 'parmigiano', r: 'F', g: 10 });
+    if (!cb && !sweet) { const rest = carbs[0]; if (rest) parts.push({ f: rest, r: 'C', g: 60 }); }
+    const nome = sweet
+      ? `${foodLabel(pr)}${cb ? ` con ${foodLabel(cb).toLowerCase()}` : ''}${veg[0] ? ` e ${foodLabel(veg[0]).toLowerCase()}` : ''}`
+      : `${cb ? CARB_NOME[cb] : 'Piatto unico'} con ${PROT_NOME[pr] || foodLabel(pr).toLowerCase()}${veg.includes('verdure') ? ' e verdure' : veg.includes('insalata') ? ' e insalata' : ''}`;
+    const dish = { n: nome, parts };
+    const r = portion(dish, target.kcal, target.protein, ex);
+    const passi = sweet
+      ? [`Metti in una ciotola ${r.items.map((x) => `${x.label} di ${x.name.toLowerCase()}`).join(', ')}.`, 'Mescola e lascia riposare 5 minuti se c’è avena, così si ammorbidisce.']
+      : [cb && CARB_COTTURA[cb], METODO[pr], veg.includes('verdure') && 'Salta le verdure in padella 6–8 minuti (o usa quelle surgelate già pronte).', veg.includes('passata') && 'Aggiungi la passata e lascia insaporire 5 minuti.', 'Componi il piatto e condisci a crudo con l’olio.'].filter(Boolean);
+    out.push({ ...r, passi, tempo: sweet ? 5 : cb === 'patate' || cb === 'farro' ? 30 : 20, fonte: 'offline' });
+  }
+  return out;
 }

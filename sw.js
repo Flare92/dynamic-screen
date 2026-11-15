@@ -1,7 +1,7 @@
 // Service worker: rende l'app disponibile offline.
 // Cambia VERSION a ogni rilascio per aggiornare la cache del codice.
 // Le foto degli esercizi stanno in una cache a parte, che sopravvive agli aggiornamenti.
-const VERSION = 'ritmo-v8';
+const VERSION = 'ritmo-v9';
 const MEDIA = 'ritmo-media-v1';
 const ASSETS = [
   './',
@@ -25,6 +25,9 @@ const ASSETS = [
   './js/narrative.js',
   './js/gymreview.js',
   './js/diet.js',
+  './js/giornata.js',
+  './js/coppia.js',
+  './js/ai.js',
   './fonts/figtree.woff2',
   './fonts/fraunces.woff2',
   './icons/icon.svg',

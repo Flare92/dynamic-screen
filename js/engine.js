@@ -1234,3 +1234,46 @@ export function analyzeProgress(state, plan, todayISO = toISO(new Date())) {
   out.streak = streak;
   return out;
 }
+
+// ------------------------------------------------------------------
+// Giornata flessibile e allenamenti di coppia
+// ------------------------------------------------------------------
+
+/** la stessa sessione rifatta per un tempo diverso (es. 25 minuti invece di 60), con gli attrezzi del suo luogo */
+export function resizeSession(p, ctx, session, minutes, week = 1) {
+  const d = { ...derive(p, ctx), equip: session.luogo ? equipFor(p, session.luogo) : derive(p, ctx).equip };
+  const s = buildSession(session.type, minutes, p, d, 0, mesoPhase(week).phase);
+  return { ...s, luogo: session.luogo, title: `${session.title.replace(/ [ABC]$/, '')} · versione da ${minutes} min`, resized: true };
+}
+
+/** esercizi che la persona non può fare per motivi di salute o dolore (il livello si gestisce a parte) */
+export function notAllowedIds(p, ctx = {}) {
+  const d = derive(p, ctx);
+  return EXERCISES.filter((e) => e.contra.some((c) => d.cond.has(c)) || e.tags.some((t) => d.blocked.has(t)) || d.exclude.has(e.id)).map((e) => e.id);
+}
+
+/**
+ * Allenamento da fare insieme: solo esercizi adatti a entrambi, al livello del più basso dei due per ogni schema,
+ * con la dose di ciascuno.
+ * partner: { o: obiettivo, pl: livelli per schema, no: esercizi da evitare, nome }
+ */
+export function coupleSession(p, ctx, partner, minutes, luogo = 'casa', week = 1) {
+  const base = derive(p, ctx);
+  const pl = { ...base.pl };
+  for (const k of Object.keys(pl)) if (partner.pl?.[k]) pl[k] = Math.min(pl[k], partner.pl[k]);
+  const d = { ...base, pl, equip: equipFor(p, luogo), exclude: new Set([...base.exclude, ...(partner.no || [])]), zones: [], favorites: [] };
+  const { phase } = mesoPhase(week);
+  const type = minutes < 25 ? 'circuito' : 'full';
+  const s = buildSession(type, minutes, p, d, week, phase);
+  const dp = { ...d, pl: partner.pl || pl, exAdj: {}, maxes: {} };
+  const goalB = DOSE[partner.o] ? partner.o : p.obiettivo;
+  for (const b of s.blocks) for (const it of b.items) {
+    const ex = BY_ID[it.id];
+    if (ex?.cat === 'strength' && b.name === 'Parte principale') {
+      const ds = dose(ex, goalB, dp, phase);
+      it.partnerDose = `${ds.text} · recupero ${ds.rest} s`;
+    }
+    if (it.tag && /Priorità|Dalla tua scheda|Scelto da te/.test(it.tag)) delete it.tag;
+  }
+  return { ...s, luogo, title: `Allenamento di coppia${partner.nome ? ` con ${partner.nome}` : ''}`, couple: true };
+}
