@@ -1,8 +1,10 @@
-// Service worker: rende l'app disponibile offline.
-// Cambia VERSION a ogni rilascio per aggiornare la cache del codice.
-// Le foto degli esercizi stanno in una cache a parte, che sopravvive agli aggiornamenti.
-const VERSION = 'ritmo-v11';
+// Service worker: rende l'app disponibile offline e la tiene aggiornata.
+// Cambia VERSION a ogni rilascio.
+// - codice e pagina: prima la rete (sempre l'ultima versione), la cache solo senza connessione;
+// - foto degli esercizi: prima la cache (non cambiano), in una cache a parte che sopravvive agli aggiornamenti.
+const VERSION = 'ritmo-v12';
 const MEDIA = 'ritmo-media-v1';
+
 const ASSETS = [
   './',
   './index.html',
@@ -37,7 +39,8 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  // cache: 'reload' scavalca la cache HTTP del browser: si scarica davvero la versione nuova
+  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
@@ -52,7 +55,6 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   const url = new URL(req.url);
   if (req.method !== 'GET' || url.origin !== location.origin) return;
-  // foto degli esercizi: prima la cache (non cambiano), poi la rete
   if (url.pathname.includes('/media/')) {
     e.respondWith(
       caches.open(MEDIA).then(async (cache) => {
@@ -65,14 +67,16 @@ self.addEventListener('fetch', (e) => {
     );
     return;
   }
-  // codice: risposta immediata dalla cache, aggiornamento in background
   e.respondWith(
     caches.open(VERSION).then(async (cache) => {
-      const cached = await cache.match(req, { ignoreSearch: true });
-      const network = fetch(req)
-        .then((res) => { if (res.ok) cache.put(req, res.clone()); return res; })
-        .catch(() => cached || (req.mode === 'navigate' ? cache.match('./index.html') : undefined));
-      return cached || network;
+      try {
+        const res = await fetch(req, { cache: 'no-cache' });
+        if (res.ok) cache.put(req, res.clone());
+        return res;
+      } catch {
+        const cached = await cache.match(req, { ignoreSearch: true });
+        return cached || (req.mode === 'navigate' ? cache.match('./index.html') : Response.error());
+      }
     }),
   );
 });
