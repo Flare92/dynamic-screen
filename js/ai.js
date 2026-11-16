@@ -27,37 +27,69 @@ export const hasAiKey = (provider) => !!ls(KEY_STORE[provider]);
 
 // ---------- Gemini (REST, risposta JSON vincolata allo schema)
 export const GEMINI_MODEL = 'gemini-3.8-flash';
-const GEMINI_FALLBACK = 'gemini-flash-latest';
+// se un modello non è disponibile o non è nel piano gratuito della chiave, si prova il successivo
+export const GEMINI_MODELS = [GEMINI_MODEL, 'gemini-flash-latest', 'gemini-flash-lite-latest'];
+const MODEL_STORE = 'ritmo.geminimodel';
+const TIMEOUT = 120_000;
 
-async function askGemini(key, { system, user, schema, maxTokens }, model = GEMINI_MODEL, strict = true) {
-  const generationConfig = { responseMimeType: 'application/json', maxOutputTokens: maxTokens };
+/** il modello che ha risposto l'ultima volta (per mostrarlo e per partire da quello) */
+export const geminiModelInUse = () => ls(MODEL_STORE) || GEMINI_MODEL;
+
+async function callGemini(key, model, { system, user, schema }, strict) {
+  const generationConfig = { responseMimeType: 'application/json' };
   if (strict) generationConfig.responseJsonSchema = schema;
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-    body: JSON.stringify({
-      // senza vincolo di schema, lo schema va nelle istruzioni
-      systemInstruction: { parts: [{ text: strict ? system : `${system}\n\nRispondi solo con un oggetto JSON valido conforme a questo JSON Schema:\n${JSON.stringify(schema)}` }] },
-      contents: [{ role: 'user', parts: [{ text: user }] }],
-      generationConfig,
-    }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = data?.error?.message || '';
-    // se il modello non è disponibile per questa chiave, usa l'ultimo Flash disponibile
-    if (res.status === 404 && model !== GEMINI_FALLBACK) return askGemini(key, { system, user, schema, maxTokens }, GEMINI_FALLBACK, strict);
-    // se lo schema non è accettato, riprova con lo schema nelle istruzioni
-    if (res.status === 400 && strict && !/API key/i.test(msg)) return askGemini(key, { system, user, schema, maxTokens }, model, false);
-    const err = new Error(data?.error?.message || `errore ${res.status}`);
-    err.status = res.status === 400 && /API key/i.test(data?.error?.message || '') ? 401 : res.status;
-    throw err;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT);
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: 'POST',
+      signal: ctrl.signal,
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({
+        // senza vincolo di schema, lo schema va nelle istruzioni
+        systemInstruction: { parts: [{ text: strict ? system : `${system}\n\nRispondi solo con un oggetto JSON valido conforme a questo JSON Schema:\n${JSON.stringify(schema)}` }] },
+        contents: [{ role: 'user', parts: [{ text: user }] }],
+        generationConfig,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    return { res, data };
+  } catch (e) {
+    if (e?.name === 'AbortError') { const err = new Error('nessuna risposta dopo 2 minuti'); err.status = 'timeout'; throw err; }
+    const err = new Error(`connessione non riuscita (${e?.message || 'rete'})`); err.status = 'rete'; throw err;
+  } finally { clearTimeout(timer); }
+}
+
+async function askGemini(key, req) {
+  const remembered = ls(MODEL_STORE);
+  const models = [...new Set([remembered, ...GEMINI_MODELS].filter(Boolean))];
+  let last = null;
+  for (const model of models) {
+    let strict = true;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const { res, data } = await callGemini(key, model, req, strict);
+      const msg = data?.error?.message || '';
+      if (res.ok) {
+        if (data.promptFeedback?.blockReason) throw new Error('Gemini non ha potuto rispondere a questa richiesta.');
+        const cand = data.candidates?.[0];
+        const text = (cand?.content?.parts || []).filter((p) => !p.thought).map((p) => p.text || '').join('');
+        if (!text) { last = Object.assign(new Error(cand?.finishReason === 'MAX_TOKENS' ? 'risposta incompleta' : `nessun testo (${cand?.finishReason || 'senza motivo'})`), { status: 'vuota' }); break; }
+        try {
+          const out = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, ''));
+          ls(MODEL_STORE, model);
+          return out;
+        } catch { last = Object.assign(new Error('risposta non leggibile'), { status: 'json' }); if (strict) { strict = false; continue; } break; }
+      }
+      // chiave non valida: inutile provare altri modelli
+      if (/API key|API_KEY/i.test(msg) || res.status === 401) throw Object.assign(new Error(msg || 'chiave non valida'), { status: 401 });
+      if (res.status === 403) throw Object.assign(new Error(msg || 'accesso negato'), { status: 403 });
+      // schema non accettato: riprova con lo schema nelle istruzioni
+      if (res.status === 400 && strict) { strict = false; continue; }
+      last = Object.assign(new Error(msg || `errore ${res.status}`), { status: res.status, model });
+      break; // 404 (modello non disponibile), 429 (quota), 5xx: prova il modello successivo
+    }
   }
-  if (data.promptFeedback?.blockReason) throw new Error('Gemini non ha potuto rispondere a questa richiesta.');
-  const cand = data.candidates?.[0];
-  const text = (cand?.content?.parts || []).filter((p) => !p.thought).map((p) => p.text || '').join('');
-  if (!text) throw new Error(cand?.finishReason === 'MAX_TOKENS' ? 'Risposta incompleta, riprova.' : 'Gemini non ha risposto, riprova.');
-  try { return JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); } catch { throw new Error('Risposta non leggibile, riprova.'); }
+  throw last || new Error('Gemini non ha risposto');
 }
 
 // ---------- Claude (SDK Anthropic, output strutturato)
@@ -81,16 +113,30 @@ async function askClaude(key, { system, user, schema, maxTokens }) {
 /** chiede una risposta JSON che rispetta lo schema al motore scelto */
 export async function ask(cfg, { system, user, schema, maxTokens = 8000 }) {
   if (!cfg?.key) throw new Error('AI non attiva');
-  return cfg.provider === 'claude' ? askClaude(cfg.key, { system, user, schema, maxTokens }) : askGemini(cfg.key, { system, user, schema, maxTokens });
+  // Gemini: nessun limite di lunghezza, perché anche il ragionamento interno conta nei token di uscita
+  return cfg.provider === 'claude' ? askClaude(cfg.key, { system, user, schema, maxTokens }) : askGemini(cfg.key, { system, user, schema });
 }
 
 /** messaggio d'errore comprensibile */
 export function aiError(e) {
-  if (e?.status === 401 || e?.status === 403) return 'la chiave API non è valida';
-  if (e?.status === 429) return 'troppe richieste, riprova tra un minuto';
+  const det = e?.message ? `: ${e.message.slice(0, 160)}` : '';
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return 'sei offline';
+  if (e?.status === 401) return 'la chiave API non è valida';
+  if (e?.status === 403) return `la chiave non ha accesso a Gemini${det}`;
+  if (e?.status === 429) return /quota|limit/i.test(e?.message || '') ? `quota gratuita esaurita o non disponibile${det}` : 'troppe richieste, riprova tra un minuto';
   if (e?.status === 529 || e?.status === 503) return 'il servizio è momentaneamente occupato';
-  if (!navigator.onLine) return 'sei offline';
   return e?.message || 'errore di rete';
+}
+
+/** prova veloce del motore scelto: { ok, secondi, modello, errore } */
+export async function testAI(cfg) {
+  const t = Date.now();
+  try {
+    const r = await ask(cfg, { system: 'Rispondi in italiano.', user: 'Rispondi con la parola "pronto".', schema: { type: 'object', properties: { risposta: { type: 'string' } }, required: ['risposta'] }, maxTokens: 200 });
+    return { ok: true, secondi: Math.round((Date.now() - t) / 100) / 10, modello: cfg.provider === 'gemini' ? geminiModelInUse() : 'claude-opus-5-5', risposta: r.risposta };
+  } catch (e) {
+    return { ok: false, secondi: Math.round((Date.now() - t) / 100) / 10, errore: aiError(e), codice: e?.status };
+  }
 }
 
 // ------------------------------------------------------------------

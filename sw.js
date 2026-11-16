@@ -2,7 +2,7 @@
 // Cambia VERSION a ogni rilascio.
 // - codice e pagina: prima la rete (sempre l'ultima versione), la cache solo senza connessione;
 // - foto degli esercizi: prima la cache (non cambiano), in una cache a parte che sopravvive agli aggiornamenti.
-const VERSION = 'ritmo-v13';
+const VERSION = 'ritmo-v14';
 const MEDIA = 'ritmo-media-v1';
 
 const ASSETS = [
