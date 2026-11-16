@@ -1,0 +1,212 @@
+{
+  ".github/workflows/pages.yml": {
+    "mtime": 1794099988.4379497,
+    "seen": 1794210925.511389,
+    "ast_hash": "6e797710430a9dd9332d689328eb990b",
+    "semantic_hash": "6e797710430a9dd9332d689328eb990b"
+  },
+  "js/app.js": {
+    "mtime": 1794785235.6942852,
+    "seen": 1794785238.4270957,
+    "ast_hash": "38fdf9b21b31831dbb96ad27a8471733",
+    "semantic_hash": ""
+  },
+  "js/assess-ui.js": {
+    "mtime": 1794661416.6724348,
+    "seen": 1794681146.5215058,
+    "ast_hash": "5015b772d70e58b6af6632e29dd8845b",
+    "semantic_hash": ""
+  },
+  "js/assessment.js": {
+    "mtime": 1794178475.0401576,
+    "seen": 1794210925.5113995,
+    "ast_hash": "b412e9d524a0091045213ca5e4937524",
+    "semantic_hash": "b412e9d524a0091045213ca5e4937524"
+  },
+  "js/diet.js": {
+    "mtime": 1794784332.238588,
+    "seen": 1794784880.2018178,
+    "ast_hash": "32ace9aede90339b6cdb5a81e3f8a75d",
+    "semantic_hash": ""
+  },
+  "js/engine.js": {
+    "mtime": 1794784354.521863,
+    "seen": 1794784880.20182,
+    "ast_hash": "238991dfa0af993196bc96425e26674c",
+    "semantic_hash": ""
+  },
+  "js/exercises.js": {
+    "mtime": 1794660798.1410372,
+    "seen": 1794681146.5215228,
+    "ast_hash": "1124c8c051d0e2e864c8c9a6853a093a",
+    "semantic_hash": ""
+  },
+  "js/fx.js": {
+    "mtime": 1794660955.766851,
+    "seen": 1794681146.5215263,
+    "ast_hash": "4aeb6797b9496fb8b6c376414fd2c8c0",
+    "semantic_hash": ""
+  },
+  "js/guide.js": {
+    "mtime": 1794660925.4882693,
+    "seen": 1794681146.5215306,
+    "ast_hash": "136b9868079d16780aae2bcae45aecce",
+    "semantic_hash": ""
+  },
+  "js/narrative.js": {
+    "mtime": 1794785142.227405,
+    "seen": 1794785238.427132,
+    "ast_hash": "7e3cb12c8f5bcad431f8bd6cc0688efc",
+    "semantic_hash": ""
+  },
+  "js/player.js": {
+    "mtime": 1794660955.7666094,
+    "seen": 1794681146.5215414,
+    "ast_hash": "d0c54e87c5d88b2f3c2be2e048808bea",
+    "semantic_hash": ""
+  },
+  "js/sheet.js": {
+    "mtime": 1794660955.7661214,
+    "seen": 1794681146.5215435,
+    "ast_hash": "8868a7d90bf9e8c4ac0dfdecebde1c52",
+    "semantic_hash": ""
+  },
+  "package.json": {
+    "mtime": 1794099852.593007,
+    "seen": 1794210925.511411,
+    "ast_hash": "fdc1c7a41a90c4fa577f7832bf39d224",
+    "semantic_hash": "fdc1c7a41a90c4fa577f7832bf39d224"
+  },
+  "sw.js": {
+    "mtime": 1794785213.4611902,
+    "seen": 1794785238.4271388,
+    "ast_hash": "7adc4d526bdc1a373006cac9d69a79c2",
+    "semantic_hash": ""
+  },
+  "tests/assessment.test.js": {
+    "mtime": 1794178315.5316408,
+    "seen": 1794210925.5114124,
+    "ast_hash": "44421ea77d4d2a1cda7175e1ad1dfdea",
+    "semantic_hash": "44421ea77d4d2a1cda7175e1ad1dfdea"
+  },
+  "tests/content.test.js": {
+    "mtime": 1794660925.4892044,
+    "seen": 1794681146.5215528,
+    "ast_hash": "a5e2d0e49d64b846ef74428a9f7d3f1a",
+    "semantic_hash": ""
+  },
+  "tests/engine.test.js": {
+    "mtime": 1794099848.717752,
+    "seen": 1794210925.5114143,
+    "ast_hash": "a715a49a861eaec03ad5a00815e6e915",
+    "semantic_hash": "a715a49a861eaec03ad5a00815e6e915"
+  },
+  "tests/narrative.test.js": {
+    "mtime": 1794661249.9263606,
+    "seen": 1794681146.5215614,
+    "ast_hash": "269e469007612dd5f243bd41aea912b0",
+    "semantic_hash": ""
+  },
+  "tests/player.test.js": {
+    "mtime": 1794147036.306544,
+    "seen": 1794210925.5114157,
+    "ast_hash": "b5dbdf32033c6b8dffada33e409bab6a",
+    "semantic_hash": "b5dbdf32033c6b8dffada33e409bab6a"
+  },
+  "README.md": {
+    "mtime": 1794785235.6951568,
+    "seen": 1794785238.4271586,
+    "ast_hash": "5f159c99735b732b1b93a11953d86873",
+    "semantic_hash": ""
+  },
+  "index.html": {
+    "mtime": 1794680765.8324256,
+    "seen": 1794681146.521569,
+    "ast_hash": "769178dd65b0878603616af597fc4dc0",
+    "semantic_hash": ""
+  },
+  "CLAUDE.md": {
+    "mtime": 1794785235.6960697,
+    "seen": 1794785238.427157,
+    "ast_hash": "6c9a23522ae8106e4a2b3c40c5a886ec",
+    "semantic_hash": ""
+  },
+  "js/gymreview.js": {
+    "mtime": 1794237644.775191,
+    "seen": 1794237712.4982646,
+    "ast_hash": "2a1a957347cb5a4ce36f8b82e08e56e1",
+    "semantic_hash": ""
+  },
+  "tests/gymreview.test.js": {
+    "mtime": 1794237679.75796,
+    "seen": 1794237712.4982915,
+    "ast_hash": "480c513cfc7498c8702b90a808e49929",
+    "semantic_hash": ""
+  },
+  "js/demo.js": {
+    "mtime": 1794660955.7515333,
+    "seen": 1794681146.5215123,
+    "ast_hash": "95fe05457c803d74f3e5ef880a47c172",
+    "semantic_hash": ""
+  },
+  "js/demos.js": {
+    "mtime": 1794660651.1358645,
+    "seen": 1794681146.5215147,
+    "ast_hash": "92848bc2a18689b8747b562d1b463a5a",
+    "semantic_hash": ""
+  },
+  "js/flow.js": {
+    "mtime": 1794681007.2277226,
+    "seen": 1794681146.5215247,
+    "ast_hash": "000b4f66f76ba1157f64b9ef4e6f79f9",
+    "semantic_hash": ""
+  },
+  "js/guide-extra.js": {
+    "mtime": 1794660916.7998192,
+    "seen": 1794681146.5215282,
+    "ast_hash": "c767dbb8a34480865a3e88ad035b5b24",
+    "semantic_hash": ""
+  },
+  "js/indagine.js": {
+    "mtime": 1794661353.8079631,
+    "seen": 1794681146.5215356,
+    "ast_hash": "8091912db7424576ae7b0ac266cfb906",
+    "semantic_hash": ""
+  },
+  "tests/indagine.test.js": {
+    "mtime": 1794681104.8549166,
+    "seen": 1794681146.5215592,
+    "ast_hash": "6d961ffcee054694b7f16406f3ede3d6",
+    "semantic_hash": ""
+  },
+  "js/ai.js": {
+    "mtime": 1794785235.6779153,
+    "seen": 1794785238.4270904,
+    "ast_hash": "71dbedf96f7c4d92ac7c8efcde3f6d50",
+    "semantic_hash": ""
+  },
+  "js/coppia.js": {
+    "mtime": 1794784431.7818675,
+    "seen": 1794784880.2018113,
+    "ast_hash": "3a1ad603bdd4961bb3a652d244268684",
+    "semantic_hash": ""
+  },
+  "js/giornata.js": {
+    "mtime": 1794784778.4783702,
+    "seen": 1794784880.2018275,
+    "ast_hash": "46e6f1b355bc97eaed50e5381fc1a820",
+    "semantic_hash": ""
+  },
+  "tests/coppia-giornata.test.js": {
+    "mtime": 1794784653.6598237,
+    "seen": 1794784880.201848,
+    "ast_hash": "e67b8da3f711e9f9dd9af978de6d9b6c",
+    "semantic_hash": ""
+  },
+  "tests/ai.test.js": {
+    "mtime": 1794785196.176172,
+    "seen": 1794785238.427141,
+    "ast_hash": "ca6854897282160792c7131070412a9b",
+    "semantic_hash": ""
+  }
+}

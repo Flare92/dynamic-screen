@@ -62,3 +62,15 @@ test('chiavi: qualsiasi formato di Google, purché completo', async () => {
   assert.ok(!PROVIDERS.gemini.keyRe.test('AIza123'));
   assert.ok(!PROVIDERS.gemini.keyRe.test(''));
 });
+
+test('Gemini: quota non disponibile per un modello → prova il successivo; errori con dettaglio', async () => {
+  const calls = mockFetch([reply({ error: { message: 'Quota exceeded for metric ... limit: 0' } }, 429), ok({ a: 'k' })]);
+  assert.deepEqual(await ask(cfg, { system: 's', user: 'u', schema }), { a: 'k' });
+  assert.match(calls[0].url, /gemini-3\.8-flash/);
+  assert.match(calls[1].url, /gemini-flash-latest/);
+  assert.equal(calls[0].body.generationConfig.maxOutputTokens, undefined, 'nessun limite: il ragionamento conta nei token');
+  mockFetch([reply({ error: { message: 'quota limit: 0' } }, 429), reply({ error: { message: 'quota limit: 0' } }, 429), reply({ error: { message: 'quota limit: 0' } }, 429)]);
+  await assert.rejects(ask(cfg, { system: 's', user: 'u', schema }), (e) => /quota gratuita/.test(aiError(e)));
+  mockFetch([reply({ error: { message: 'Permission denied: Generative Language API has not been used' } }, 403)]);
+  await assert.rejects(ask(cfg, { system: 's', user: 'u', schema }), (e) => /non ha accesso/.test(aiError(e)));
+});

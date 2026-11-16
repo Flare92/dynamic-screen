@@ -3,10 +3,7 @@
   "4": "diet.js",
   "6": "narrative.js",
   "7": "Guided 3D Physical Tests",
-  "8": "flow.js",
-  "16": "analyzeStory",
-  "17": "gymreview.js",
-  "18": "narrative.test.js",
-  "19": "indagine.test.js",
+  "8": "startPlayer",
+  "19": "flow.js",
   "23": "ai.js"
 }

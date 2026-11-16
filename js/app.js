@@ -17,7 +17,7 @@ import {
 import { QUESTIONS, EXAMPLE, parseNarrative, coverage, analyzeWithAI, mergeAI } from './narrative.js';
 import { DIET_LABEL, DISPENSA, pantryRecipes, coupleMenu, foodLabel } from './diet.js';
 import { dayOptions, applyOption, undoOption } from './giornata.js';
-import { aiRicette, aiGiornata, aiError, aiConfig, aiProvider, setAiProvider, setAiKey, hasAiKey, PROVIDERS } from './ai.js';
+import { aiRicette, aiGiornata, aiError, aiConfig, aiProvider, setAiProvider, setAiKey, hasAiKey, PROVIDERS, testAI } from './ai.js';
 import { buildCard, encodeCard, decodeCard, shareUrl, weekTogether, bestTogetherDay } from './coppia.js';
 import { parseGymList, reviewGym, VERDICT_LABEL, VERDICT_COUNT, GYM_PICKS, lineIsPick } from './gymreview.js';
 import { startAssessment, renderAssessment, mountAssessment, handleAssessmentClick, assessmentActive, cancelAssessment } from './assess-ui.js';
@@ -31,7 +31,7 @@ import { demoFor } from './demos.js';
 // ==================================================================
 
 // versione mostrata nel profilo: aggiornala insieme a VERSION in sw.js
-const APP_VERSION = 'v13';
+const APP_VERSION = 'v14';
 const KEY = 'ritmo.v1';
 const empty = () => ({ profile: null, planStart: null, calorieAdjust: 0, log: {}, weights: [], assess: [], swaps: {}, excluded: [], exAdj: {}, fbCount: 0 });
 
@@ -410,6 +410,14 @@ const storySave = (v) => { try { localStorage.setItem(STORY_KEY, v); } catch { /
 /** il motore AI attivo ({ provider, key, label }) o null */
 const aiKey = () => aiConfig();
 
+let aiTest = null;
+async function runAiTest() {
+  const cfg = aiConfig();
+  if (!cfg) return;
+  aiTest = { loading: true }; rerender();
+  aiTest = await testAI(cfg); rerender();
+}
+// esito della prova del motore AI: { loading } | { ok, secondi, modello } | { errore }
 /** scelta del motore AI e della chiave (profilo e racconto) */
 function aiSettings() {
   const cur = aiProvider();
@@ -421,7 +429,11 @@ function aiSettings() {
       ? 'Gemini 3.8 Flash di Google ha un piano gratuito: crea la chiave su Google AI Studio con il tuo account Google. Sul piano gratuito Google può usare le richieste per migliorare i suoi prodotti: non scrivere dati che non vuoi condividere.'
       : 'Claude di Anthropic è a pagamento: ogni richiesta costa pochi centesimi sul tuo account. Crea la chiave sulla console di Anthropic.'}
       La chiave resta solo su questo telefono e non finisce nelle copie dei dati.</p>
-    ${on ? `<div class="row between" style="margin-top:12px"><span class="chip ok">${P.label} attivo</span><button class="link small" data-action="ai-remove" data-p="${cur}">Rimuovi la chiave</button></div>`
+    ${on ? `<div class="row between" style="margin-top:12px"><span class="chip ok">${P.label} attivo</span><button class="link small" data-action="ai-remove" data-p="${cur}">Rimuovi la chiave</button></div>
+      <button class="btn soft wide" style="margin-top:12px" data-action="ai-test" ${aiTest?.loading ? 'disabled' : ''}>${aiTest?.loading ? 'Sto provando…' : 'Prova l’AI'}</button>
+      ${aiTest && !aiTest.loading ? (aiTest.ok
+        ? `<p class="alert ok" style="margin-top:10px"><span>✓</span><span>Funziona: ha risposto in ${String(aiTest.secondi).replace('.', ',')} secondi con il modello ${esc(aiTest.modello)}.</span></p>`
+        : `<p class="alert stop" style="margin-top:10px"><span>⚠️</span><span>Non funziona: ${esc(aiTest.errore)}${aiTest.codice ? ` (codice ${esc(aiTest.codice)})` : ''}.</span></p>`) : ''}`
       : `<div class="row" style="margin-top:12px"><input type="password" id="ai-key" placeholder="${P.keyHint}" autocomplete="off"><button type="button" class="btn soft small" data-action="ai-save" data-p="${cur}">Salva</button></div>
       <a class="link small" style="display:inline-block;margin-top:10px" href="${P.keyUrl}" target="_blank" rel="noopener">Crea la chiave ${cur === 'gemini' ? 'gratuita su Google AI Studio' : 'su Anthropic'} →</a>`}`;
 }
@@ -1803,10 +1815,11 @@ document.addEventListener('click', (e) => {
       const v = document.getElementById('ai-key').value.replace(/[\s"'`]/g, '');
       // controllo minimo qui (non nel modulo AI): la validità vera la verifica il servizio alla prima richiesta
       if (v.length < 20) { toast('La chiave sembra incompleta: copiala di nuovo per intero'); return; }
-      setAiKey(t.dataset.p, v); toast(`${P.label} attivo`); rerender();
+      setAiKey(t.dataset.p, v); toast(`${P.label} attivo: lo provo`); runAiTest();
       break;
     }
-    case 'ai-remove': setAiKey(t.dataset.p, null); toast('Chiave rimossa'); rerender(); break;
+    case 'ai-remove': setAiKey(t.dataset.p, null); aiTest = null; toast('Chiave rimossa'); rerender(); break;
+    case 'ai-test': runAiTest(); break;
     case 'ai-provider': setAiProvider(t.dataset.p); rerender(); break;
     case 'pick-day': selectedDay = Number(t.dataset.day); showFeedback = false; rerender(); break;
     case 'open-menu': menuDay = Number(t.dataset.day); break;
