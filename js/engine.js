@@ -1277,3 +1277,19 @@ export function coupleSession(p, ctx, partner, minutes, luogo = 'casa', week = 1
   }
   return { ...s, luogo, title: `Allenamento di coppia${partner.nome ? ` con ${partner.nome}` : ''}`, couple: true };
 }
+
+/** allenamento scelto dalla persona: tipo, durata e luogo (con gli attrezzi di quel luogo) */
+export const CUSTOM_TYPES = [
+  { id: 'full', label: 'Forza total body' }, { id: 'upper', label: 'Forza parte alta' }, { id: 'lower', label: 'Forza parte bassa' },
+  { id: 'core', label: 'Core e addome' }, { id: 'circuito', label: 'Circuito metabolico' }, { id: 'cardio', label: 'Cardio' },
+  { id: 'intervalli', label: 'Intervalli' }, { id: 'mobilita', label: 'Mobilità e allungamento' }, { id: 'postura', label: 'Postura' },
+];
+export function customSession(p, ctx, { type, minutes, luogo }, week = 1) {
+  const d = { ...derive(p, ctx), equip: equipFor(p, luogo || 'casa') };
+  let t = type;
+  if (t === 'intervalli' && !d.hiitOk) t = 'cardio';
+  if (t === 'circuito' && !d.hiitOk && d.blocked.has('impatto')) t = 'full';
+  const s = buildSession(t, minutes, p, d, week, mesoPhase(week).phase);
+  const label = CUSTOM_TYPES.find((x) => x.id === type)?.label || s.title;
+  return { ...s, luogo, title: label, custom: true };
+}

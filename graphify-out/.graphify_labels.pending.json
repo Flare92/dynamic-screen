@@ -3,7 +3,10 @@
   "4": "diet.js",
   "6": "narrative.js",
   "7": "Guided 3D Physical Tests",
-  "8": "startPlayer",
+  "8": "coppia-giornata.test.js",
+  "16": "weekMenu",
+  "17": "Ritmo – note per l'assistente",
+  "18": "ai.test.js",
   "19": "flow.js",
   "23": "ai.js"
 }

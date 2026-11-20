@@ -3,7 +3,7 @@
 import {
   CONDITIONS, GOALS, EQUIPMENT, WEEKDAYS, WEEKDAYS_LONG, TYPE_KIND,
   generatePlan, analyzeProgress, expectedWeight, buildSession, derive, allowedExercises, alternativesFor,
-  toISO, fromISO, addDays, daysBetween, weekdayIndex, formatDate, resizeSession, coupleSession,
+  toISO, fromISO, addDays, daysBetween, weekdayIndex, formatDate, resizeSession, coupleSession, customSession, CUSTOM_TYPES,
 } from './engine.js';
 import { EXERCISES } from './exercises.js';
 import { guideFor, MUSCLE_LABELS } from './guide.js';
@@ -31,7 +31,7 @@ import { demoFor } from './demos.js';
 // ==================================================================
 
 // versione mostrata nel profilo: aggiornala insieme a VERSION in sw.js
-const APP_VERSION = 'v14';
+const APP_VERSION = 'v15';
 const KEY = 'ritmo.v1';
 const empty = () => ({ profile: null, planStart: null, calorieAdjust: 0, log: {}, weights: [], assess: [], swaps: {}, excluded: [], exAdj: {}, fbCount: 0 });
 
@@ -114,10 +114,12 @@ function sessionFor(plan, iso) {
   const from = lg.sessionFrom;
   const wd = from ?? weekdayIndex(fromISO(iso));
   let session = wd >= 0 ? plan.schedule[wd].session : null;
+  // allenamento creato dalla persona per questo giorno
+  if (lg.custom) session = customSession(state.profile, planCtx(), lg.custom, plan.week);
   if (session && lg.couple && state.partner) session = coupleSession(state.profile, planCtx(), state.partner, session.minutes, session.luogo || 'casa', plan.week);
   else if (session && lg.short && lg.short < session.minutes) session = resizeSession(state.profile, planCtx(), session, lg.short, plan.week);
   const extra = lg.extra !== undefined && lg.extra !== null && lg.extra >= 0 ? plan.schedule[lg.extra].session : null;
-  return { session, moved: from !== undefined && from !== null && from >= 0, rested: from === -1, recupero: !!lg.recupero, extra };
+  return { session, moved: !lg.custom && from !== undefined && from !== null && from >= 0, rested: !lg.custom && from === -1, recupero: !!lg.recupero, extra };
 }
 /** il registro di una sessione: quella principale o la seconda del giorno (doppio) */
 function partLog(iso, which) {
@@ -150,8 +152,8 @@ $tabbar.innerHTML = TABS.map(([id, l]) => `<a href="#/${id}" data-tab="${id}">${
 
 const ALIAS = { piano: 'allenamento', setup: 'inizio', capito: 'perche', alimentazione: 'cibo' };
 const NO_PROFILE = ['benvenuto', 'inizio', 'racconto'];
-const NO_TABS = ['benvenuto', 'inizio', 'racconto', 'valutazione', 'palestra', 'perche', 'partenza', 'esercizi', 'profilo', 'giornata', 'ricetta', 'coppia'];
-const TAB_OF = { partenza: 'progressi', esercizi: 'allenamento', palestra: 'allenamento', perche: 'allenamento', giornata: 'oggi', ricetta: 'cibo', coppia: 'oggi' };
+const NO_TABS = ['benvenuto', 'inizio', 'racconto', 'valutazione', 'palestra', 'perche', 'partenza', 'esercizi', 'profilo', 'giornata', 'ricetta', 'coppia', 'scegli'];
+const TAB_OF = { partenza: 'progressi', esercizi: 'allenamento', palestra: 'allenamento', perche: 'allenamento', giornata: 'oggi', ricetta: 'cibo', coppia: 'oggi', scegli: 'oggi' };
 
 let routeQuery = new URLSearchParams();
 function route() {
@@ -170,7 +172,7 @@ function route() {
   $tabbar.querySelectorAll('a').forEach((a) => a.classList.toggle('on', a.dataset.tab === (TAB_OF[page] || page)));
 
   if (page === 'inizio' && !draft) startFlow(!!state.profile);
-  const views = { benvenuto: viewWelcome, inizio: viewFlow, oggi: viewToday, allenamento: viewTraining, cibo: viewFood, esercizi: viewLibrary, progressi: viewProgress, profilo: viewProfile, valutazione: renderAssessment, partenza: viewStart, racconto: viewStory, perche: viewWhy, palestra: viewGym, giornata: viewDay, ricetta: viewRecipe, coppia: viewCouple };
+  const views = { benvenuto: viewWelcome, inizio: viewFlow, oggi: viewToday, allenamento: viewTraining, cibo: viewFood, esercizi: viewLibrary, progressi: viewProgress, profilo: viewProfile, valutazione: renderAssessment, partenza: viewStart, racconto: viewStory, perche: viewWhy, palestra: viewGym, giornata: viewDay, ricetta: viewRecipe, coppia: viewCouple, scegli: viewPick };
   $app.innerHTML = (views[page] || viewToday)();
   $app.dataset.page = page;
   if (page === 'inizio') bindFlowInputs();
@@ -666,6 +668,7 @@ function sessionCard(s, iso, lg, moved, which = '') {
       <p class="small muted">${which ? 'Seconda sessione di oggi · ' : ''}${total} esercizi${nDone && !lg.done ? ` · ${nDone} già fatti` : ''}${moved && !which ? ' · spostato a oggi' : ''}</p>
       ${s.couple ? `<p class="small couple-note">Esercizi adatti a entrambi. Sotto ogni esercizio trovi anche la dose di ${esc(state.partner?.nome || 'chi si allena con te')}.</p>` : ''}
       ${!future && !lg.done ? `<button class="btn primary wide" data-action="play" data-iso="${iso}" data-which="${which}">${ICON.play} ${nDone ? 'Riprendi l’allenamento' : 'Inizia l’allenamento'}</button>` : ''}
+      ${!lg.done && !which && fromISO(iso) >= fromISO(today()) ? `<a class="btn soft wide" style="margin-top:10px" href="#/scegli?iso=${iso}">🔁 Scegli un altro allenamento</a>` : ''}
       <details class="fold" ${lg.done || future ? '' : ''}>
         <summary>Guarda gli esercizi</summary>
         ${exList(s, iso, lg, { check: !future, swap: !s.couple && !s.resized, which })}
@@ -701,6 +704,7 @@ function restCard(plan, iso, lg, { rested = false, recupero = false } = {}) {
       <details class="fold" ${recupero ? 'open' : ''}><summary>${recupero ? 'La tua mobilità di oggi' : 'Se vuoi, 5 minuti di allungamento'}</summary>
         ${items.map((it) => `<div class="ex"><button class="ex-main" data-action="open-ex" data-id="${it.id}">${thumbHTML(it.id)}<span class="ex-body"><span class="ex-name">${esc(it.name)}</span><span class="ex-dose">${esc(it.dose)}</span></span></button></div>`).join('')}
       </details>
+      ${!lg.done && fromISO(iso) >= fromISO(today()) ? `<a class="btn soft wide" style="margin-top:14px" href="#/scegli?iso=${iso}">🏋️ ${iso === today() ? 'Voglio allenarmi oggi' : 'Voglio allenarmi questo giorno'}</a>` : ''}
       ${canMove && missed.length && !lg.done && !rested ? `
         <p class="fb-q">${isStart ? 'Vuoi iniziare subito?' : 'Hai saltato un allenamento?'}</p>
         <p class="small muted">${isStart ? 'Puoi fare oggi il primo:' : 'Puoi recuperarlo oggi:'}</p>
@@ -1458,6 +1462,85 @@ function changedCard() {
 }
 
 // ==================================================================
+// Scegli tu l'allenamento del giorno
+// ==================================================================
+
+let pickForm = null; // { iso, luogo, type, minutes }
+
+/** indice della sessione davvero prevista in un giorno (-1 = riposo, null = allenamento creato) */
+function effIndex(iso) {
+  const lg = state.log[iso] || {};
+  if (lg.custom) return null;
+  return lg.sessionFrom ?? weekdayIndex(fromISO(iso));
+}
+
+function viewPick() {
+  const plan = getPlan();
+  const iso = routeQuery.get('iso') || today();
+  const di = weekdayIndex(fromISO(iso));
+  const ws = addDays(fromISO(iso), -di);
+  const cur = sessionFor(plan, iso).session;
+  const lg = state.log[iso] || {};
+  if (!pickForm || pickForm.iso !== iso) {
+    const pal = (state.profile.sessioni || []).some((x) => x.luogo === 'palestra');
+    pickForm = { iso, luogo: cur?.luogo || (pal ? 'palestra' : 'casa'), type: 'full', minutes: cur?.minutes || 45 };
+  }
+  const f = pickForm;
+  const low = (t) => t.replace(/ [ABC]$/, '').toLowerCase();
+  const isToday = iso === today();
+  const when = isToday ? 'oggi' : WDL[di];
+  const days = [0, 1, 2, 3, 4, 5, 6].filter((i) => i !== di).map((i) => {
+    const dIso = toISO(addDays(ws, i));
+    return { i, iso: dIso, s: sessionFor(plan, dIso).session, done: !!state.log[dIso]?.done, past: fromISO(dIso) < fromISO(today()) };
+  }).filter((d) => d.s && !d.done);
+  const changed = lg.custom || (lg.sessionFrom !== undefined && lg.sessionFrom !== null) || lg.short || lg.couple;
+  const opt = (k, v, label, on) => `<button type="button" data-action="pick-set" data-k="${k}" data-v="${v}" class="${on ? 'on' : ''}">${label}</button>`;
+  return `
+  ${subHdr(`Scegli l’allenamento di ${when}`, '#/oggi')}
+  ${coach(cur ? `Per ${when} era previsto <b>${esc(low(cur.title))}</b>${cur.luogo ? ` ${LUOGO_LABEL[cur.luogo].toLowerCase()}` : ''}, ${cur.minutes} minuti. Decidi tu: prendi un allenamento della settimana o creane uno.` : `Per ${when} era previsto riposo. Se vuoi allenarti, scegli tu cosa fare.`, R(1))}
+
+  ${days.length ? `<div class="section-title"><h2>Dalla tua settimana</h2></div>
+  <div class="stack">
+    ${days.map((d) => `
+      <section class="card pick-day ${R(2)}">
+        <div class="row between"><span class="kicker">${cap(WDL[d.i])}${d.past ? ' · saltato' : ''}</span><span class="small muted">${d.s.minutes} min${d.s.luogo ? ` · ${LUOGO_LABEL[d.s.luogo].toLowerCase()}` : ''}</span></div>
+        <h3>${esc(d.s.title)}</h3>
+        <div class="${cur && !d.past ? 'grid-2' : 'stack'}" style="margin-top:12px">
+          ${d.past ? `<button class="btn primary" data-action="pick-week" data-mode="recupera" data-from="${d.i}" data-iso="${iso}">Recuperalo ${when}</button>`
+            : cur ? `<button class="btn primary" data-action="pick-week" data-mode="scambia" data-from="${d.i}" data-iso="${iso}">Scambia</button>
+                     <button class="btn soft" data-action="pick-week" data-mode="sposta" data-from="${d.i}" data-iso="${iso}">Fallo solo ${when}</button>`
+              : `<button class="btn primary" data-action="pick-week" data-mode="sposta" data-from="${d.i}" data-iso="${iso}">Fallo ${when} (${WDL[d.i]} riposi)</button>`}
+        </div>
+        ${cur && !d.past ? `<p class="small muted" style="margin-top:8px">Con lo scambio, ${WDL[d.i]} farai ${esc(low(cur.title))}. Con “solo ${when}”, ${WDL[d.i]} diventa riposo e ${esc(low(cur.title))} si salta.</p>` : ''}
+      </section>`).join('')}
+  </div>` : ''}
+
+  <div class="section-title"><h2>Crea un allenamento</h2></div>
+  <section class="card stack ${R(3)}">
+    <div class="field"><span>Dove</span><div class="seg">${[['palestra', 'Palestra'], ['casa', 'Casa'], ['aperto', 'All’aperto']].map(([v, l]) => opt('luogo', v, l, f.luogo === v)).join('')}</div></div>
+    <div class="field"><span>Cosa</span><div class="chips">${CUSTOM_TYPES.map((t) => opt('type', t.id, t.label, f.type === t.id)).join('')}</div></div>
+    <div class="field"><span>Quanto tempo</span><div class="seg">${[15, 20, 30, 45, 60, 75, 90].map((m) => opt('minutes', m, `${m}′`, f.minutes === m)).join('')}</div></div>
+    <button class="btn primary wide" data-action="pick-custom" data-iso="${iso}">Fai questo ${when}</button>
+    <p class="small muted">Lo preparo con gli esercizi adatti a te e con gli attrezzi che hai in quel luogo.</p>
+  </section>
+
+  <div class="stack" style="margin-top:16px">
+    ${cur ? `<button class="btn line wide" data-action="pick-rest" data-iso="${iso}">${cap(when)} riposo</button>` : ''}
+    ${changed ? `<button class="btn line wide" data-action="pick-reset" data-iso="${iso}">Torna al programma di ${when}</button>` : ''}
+  </div>`;
+}
+
+/** applica una scelta del giorno, con la possibilità di annullarla da Oggi */
+function applyPick(iso, title, apply) {
+  if (state.lastChange?.date === today() && state.lastChange.iso === iso) undoOption(state.log, state.lastChange.undo);
+  state.lastChange = { date: today(), iso, title, undo: applyOption(state.log, { apply }) };
+  save(); haptic([10, 30, 10]);
+  selectedDay = weekdayIndex(fromISO(iso));
+  location.hash = '#/oggi';
+  toast('Allenamento cambiato');
+}
+
+// ==================================================================
 // Ricette con quello che hai in casa
 // ==================================================================
 
@@ -1850,6 +1933,40 @@ document.addEventListener('click', (e) => {
       break;
     case 'play': startPlayer(t.dataset.iso, t.dataset.which); break;
     case 'day-ai': askDayAI(t); break;
+    case 'pick-set': pickForm[t.dataset.k] = t.dataset.k === 'minutes' ? Number(t.dataset.v) : t.dataset.v; haptic(8); rerender(); break;
+    case 'pick-week': {
+      const iso = t.dataset.iso;
+      const ws = addDays(fromISO(iso), -weekdayIndex(fromISO(iso)));
+      const from = Number(t.dataset.from);
+      const fromIso = toISO(addDays(ws, from));
+      const plan = getPlan();
+      const mine = effIndex(iso);
+      const theirs = effIndex(fromIso);
+      const cl = { custom: undefined, short: undefined, couple: undefined, recupero: undefined };
+      const X = sessionFor(plan, fromIso).session;
+      // l'altro giorno: con lo scambio riceve l'allenamento di oggi (anche se creato da te), con lo spostamento riposa
+      const mineCustom = state.log[iso]?.custom;
+      const other = t.dataset.mode === 'scambia' ? (mineCustom ? { ...cl, custom: mineCustom, sessionFrom: undefined } : { ...cl, sessionFrom: mine })
+        : t.dataset.mode === 'sposta' ? { ...cl, sessionFrom: -1 } : null;
+      const here = theirs === null ? { ...cl, custom: state.log[fromIso].custom, sessionFrom: undefined } : { ...cl, sessionFrom: theirs };
+      const apply = [{ iso, patch: here }, ...(other ? [{ iso: fromIso, patch: other }] : [])];
+      applyPick(iso, `${X.title}${t.dataset.mode === 'scambia' ? ` (scambiato con ${WDL[from]})` : ''}`, apply);
+      break;
+    }
+    case 'pick-custom': {
+      const { luogo, type, minutes } = pickForm;
+      applyPick(t.dataset.iso, `${CUSTOM_TYPES.find((x) => x.id === type).label} ${LUOGO_LABEL[luogo].toLowerCase()}, ${minutes} min`, [{ iso: t.dataset.iso, patch: { custom: { type, minutes, luogo }, short: undefined, couple: undefined, recupero: undefined } }]);
+      break;
+    }
+    case 'pick-rest': applyPick(t.dataset.iso, 'riposo', [{ iso: t.dataset.iso, patch: { sessionFrom: -1, custom: undefined, short: undefined, couple: undefined } }]); break;
+    case 'pick-reset': {
+      const iso = t.dataset.iso;
+      if (state.lastChange?.iso === iso || (state.lastChange?.date === today() && !state.lastChange.iso && iso === today())) { undoOption(state.log, state.lastChange.undo); state.lastChange = null; }
+      const lg = dayLog(iso);
+      ['sessionFrom', 'custom', 'short', 'couple', 'recupero'].forEach((k) => delete lg[k]);
+      save(); location.hash = '#/oggi'; toast('Programma ripristinato');
+      break;
+    }
     case 'day-apply': {
       const plan = getPlan();
       const o = dayOptions(weekDays(plan), weekdayIndex(new Date()), dayForm).find((x) => x.id === t.dataset.id);

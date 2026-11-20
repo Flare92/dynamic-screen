@@ -6,9 +6,9 @@
     "semantic_hash": "6e797710430a9dd9332d689328eb990b"
   },
   "js/app.js": {
-    "mtime": 1794816469.1568203,
-    "seen": 1794816489.518805,
-    "ast_hash": "bb58f7e3a14fe1aca051a7f22a1ccfb9",
+    "mtime": 1795167999.9612482,
+    "seen": 1795168004.9087439,
+    "ast_hash": "a7c0c31c0485b1c50c6e85f04c998eaf",
     "semantic_hash": ""
   },
   "js/assess-ui.js": {
@@ -30,9 +30,9 @@
     "semantic_hash": ""
   },
   "js/engine.js": {
-    "mtime": 1794784354.521863,
-    "seen": 1794784880.20182,
-    "ast_hash": "238991dfa0af993196bc96425e26674c",
+    "mtime": 1795167874.8157167,
+    "seen": 1795168004.9087577,
+    "ast_hash": "23b882c033954969a9518890951ecdab",
     "semantic_hash": ""
   },
   "js/exercises.js": {
@@ -78,9 +78,9 @@
     "semantic_hash": "fdc1c7a41a90c4fa577f7832bf39d224"
   },
   "sw.js": {
-    "mtime": 1794816457.5920308,
-    "seen": 1794816489.5188544,
-    "ast_hash": "d5ab9bc10b92f1ae0fd5cddbd601c11e",
+    "mtime": 1795167944.448558,
+    "seen": 1795168004.908797,
+    "ast_hash": "695ad0f9933015f01de117dca068adfa",
     "semantic_hash": ""
   },
   "tests/assessment.test.js": {
@@ -126,9 +126,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794786617.268265,
-    "seen": 1794816489.5188737,
-    "ast_hash": "16539858392c0d4a8c8150ff17a941cf",
+    "mtime": 1795168000.7801673,
+    "seen": 1795168004.9088125,
+    "ast_hash": "55ee05797d212a7cca2a254d4f85cd67",
     "semantic_hash": ""
   },
   "js/gymreview.js": {
@@ -198,9 +198,9 @@
     "semantic_hash": ""
   },
   "tests/coppia-giornata.test.js": {
-    "mtime": 1794784653.6598237,
-    "seen": 1794784880.201848,
-    "ast_hash": "e67b8da3f711e9f9dd9af978de6d9b6c",
+    "mtime": 1795167944.448558,
+    "seen": 1795168004.908803,
+    "ast_hash": "b3e360c6533b3c0b3c7eadf5e6d23b16",
     "semantic_hash": ""
   },
   "tests/ai.test.js": {
