@@ -127,3 +127,18 @@ test('ricette dalla dispensa: con gli ingredienti in casa e vicine ai valori del
   assert.ok(veg.every((x) => !x.items.some((i) => i.food === 'pollo')));
   assert.deepEqual(pantryRecipes(['riso', 'olio'], 'pranzo', { kcal: 600, protein: 35 }, {}), []);
 });
+
+test('allenamento scelto dalla persona: tipo, durata e attrezzi del luogo', async () => {
+  const { customSession, CUSTOM_TYPES } = await import('../js/engine.js');
+  for (const t of CUSTOM_TYPES) {
+    const s = customSession(base, {}, { type: t.id, minutes: 45, luogo: 'palestra' }, 1);
+    assert.equal(s.minutes, 45);
+    assert.equal(s.luogo, 'palestra');
+    assert.equal(s.title, t.label);
+    assert.ok(s.blocks.flatMap((b) => b.items).length >= 2, t.id);
+  }
+  const casa = customSession({ ...base, attrezzi: [] }, {}, { type: 'full', minutes: 30, luogo: 'casa' }, 1);
+  for (const it of casa.blocks.flatMap((b) => b.items)) assert.ok(BY_ID[it.id].eq.includes('corpo'), `${it.id} richiede attrezzi che a casa non ci sono`);
+  const pal = customSession(base, {}, { type: 'upper', minutes: 60, luogo: 'palestra' }, 1);
+  assert.ok(pal.blocks.find((b) => b.name === 'Parte principale').items.some((i) => BY_ID[i.id].eq.includes('palestra')), 'in palestra si usano le macchine');
+});
