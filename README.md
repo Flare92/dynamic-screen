@@ -116,7 +116,7 @@ Il workflow `.github/workflows/pages.yml` esegue i test e pubblica l’app su Gi
 Una volta sola: in GitHub, **Settings → Pages → Source: GitHub Actions**.
 Poi apri l’indirizzo dal telefono e scegli “Aggiungi alla schermata Home”.
 
-Dopo ogni modifica ai file, aggiorna `VERSION` in `sw.js` così i telefoni scaricano la nuova versione.
+Dopo ogni modifica ai file, aggiorna `VERSION` in `sw.js` (e `APP_VERSION` in `js/app.js`) così i telefoni scaricano la nuova versione. Se la pubblicazione fallisce per un errore temporaneo di GitHub, non rilanciare la stessa esecuzione (crea artefatti doppi): serve un nuovo push su `main`.
 
 ## Struttura
 
